@@ -5,39 +5,106 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR 스캔 인증</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; margin: 0; }
-        .container { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        #reader { width: 100%; border-radius: 10px; margin-top: 20px; }
-        .btn-deny { display: block; width: 100%; padding: 15px; margin-top: 20px; background: #dc3545; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        body { 
+            font-family: 'Malgun Gothic', sans-serif; 
+            text-align: center; 
+            padding: 20px; 
+            background-color: #f0f2f5; 
+            margin: 0; 
+        }
+        .container { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            max-width: 400px; 
+            margin: 20px auto; 
+        }
+        h1 { font-size: 22px; color: #333; margin-bottom: 10px; }
+        p { color: #666; font-size: 14px; line-height: 1.5; }
+        #reader { 
+            width: 100%; 
+            border-radius: 15px; 
+            overflow: hidden; 
+            margin-top: 20px;
+            border: 1px solid #ddd;
+        }
+        #result { 
+            margin-top: 20px; 
+            font-weight: bold; 
+            color: #007bff; 
+            min-height: 24px;
+        }
+        .btn-deny { 
+            display: block; 
+            width: 100%; 
+            padding: 15px; 
+            margin-top: 20px; 
+            background: #dc3545; 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            font-weight: bold; 
+            font-size: 16px;
+            cursor: pointer; 
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔒 QR 스캔 인증</h1>
-        <p>PC 화면의 QR 코드를 스캐너에 비춰주세요.</p>
+        <p>PC 화면에 나타난 QR 코드를<br>카메라 중앙에 맞춰주세요.</p>
+        
         <div id="reader"></div>
-        <p id="result" style="color: #007bff; font-weight: bold; margin-top: 15px;"></p>
-        <button class="btn-deny" onclick="window.close()">취소하기</button>
+        
+        <p id="result"></p>
+        
+        <button class="btn-deny" onclick="window.history.back()">취소하고 돌아가기</button>
     </div>
 
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
-        function onScanSuccess(decodedText) {
-            document.getElementById('result').innerText = "✅ 스캔 성공! 인증되었습니다.";
-            alert("인증 완료되었습니다.");
-            // 5주 차에 백엔드 API 연동 예정
+        // 스캔 성공 시 실행될 함수
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById('result').innerText = "✅ 인증 성공! 잠시만 기다려주세요.";
+            console.log("스캔된 내용:", decodedText);
+            alert("인증에 성공했습니다: " + decodedText);
+            
+            // [5주차 예고] 여기서 백엔드 서버로 인증 완료 신호를 보내게 됩니다.
         }
 
-        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        // 스캐너 설정
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            }
+        );
+
+        // 화면에 스캐너 띄우기
         html5QrcodeScanner.render(onScanSuccess);
 
-        // 버튼 한글화
-        setTimeout(() => {
+        // 버튼 및 UI 한글화 작업
+        const translateUI = () => {
             const btn = document.getElementById('html5-qrcode-button-camera-permission');
-            if(btn) btn.innerText = "카메라 권한 허용하기";
+            if (btn) btn.innerText = "카메라 권한 허용하기";
+            
             const stopBtn = document.getElementById('html5-qrcode-button-camera-stop');
-            if(stopBtn) stopBtn.innerText = "스캔 중지";
-        }, 200);
+            if (stopBtn) stopBtn.innerText = "스캔 중지";
+            
+            const startBtn = document.getElementById('html5-qrcode-button-camera-start');
+            if (startBtn) startBtn.innerText = "스캔 시작";
+            
+            const scanRegion = document.getElementById('html5-qrcode-anchor-scan-type-change');
+            if (scanRegion) scanRegion.style.display = 'none'; // 불필요한 링크 숨김
+        };
+
+        // UI가 그려진 후 한글로 교체 (약간의 시간차 필요)
+        setTimeout(translateUI, 300);
+        // 버튼이 동적으로 생길 수 있으므로 반복 체크
+        setInterval(translateUI, 1000);
     </script>
 </body>
 </html>
