@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR 스캔 인증</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; margin: 0; }
+        .container { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        #reader { width: 100%; border-radius: 10px; margin-top: 20px; }
+        .btn-deny { display: block; width: 100%; padding: 15px; margin-top: 20px; background: #dc3545; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 QR 스캔 인증</h1>
+        <p>PC 화면의 QR 코드를 스캐너에 비춰주세요.</p>
+        <div id="reader"></div>
+        <p id="result" style="color: #007bff; font-weight: bold; margin-top: 15px;"></p>
+        <button class="btn-deny" onclick="window.close()">취소하기</button>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+        function onScanSuccess(decodedText) {
+            document.getElementById('result').innerText = "✅ 스캔 성공! 인증되었습니다.";
+            alert("인증 완료되었습니다.");
+            // 5주 차에 백엔드 API 연동 예정
+        }
+
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render(onScanSuccess);
+
+        // 버튼 한글화
+        setTimeout(() => {
+            const btn = document.getElementById('html5-qrcode-button-camera-permission');
+            if(btn) btn.innerText = "카메라 권한 허용하기";
+            const stopBtn = document.getElementById('html5-qrcode-button-camera-stop');
+            if(stopBtn) stopBtn.innerText = "스캔 중지";
+        }, 200);
+    </script>
+</body>
+</html>
