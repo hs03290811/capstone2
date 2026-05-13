@@ -10,15 +10,19 @@
     <input type="password" id="password" placeholder="비밀번호">
     <button onclick="login()">로그인</button>
 
-    <div id="mfa-section" style="display: none; margin-top: 20px; text-align: center; border: 1px solid #ccc; padding: 20px; border-radius: 10px;">
-        <hr>
-        <h3>📱 2단계 인증이 필요합니다</h3>
-        <p>등록된 모바일 기기에서 QR 코드를 스캔하세요.</p>
-        <div id="qrcode" style="margin: 20px auto; display: flex; justify-content: center; align-items: center; min-height: 150px;">
-            <img id="qr-image" src="" alt="QR Code" style="display: none; border: 5px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-        </div>
-        <p id="timer" style="color: red; font-weight: bold;">남은 시간: 03:00</p>
+
+<div id="mfa-section" style="display:none; text-align: center;">
+    <hr>
+    <h3>📱 2단계 인증이 필요합니다</h3>
+    <p>등록된 모바일 기기에서 QR 코드를 스캔하세요.</p>
+    
+    <!-- 🚀 이 태그가 핵심입니다 -->
+    <div style="margin: 20px 0;">
+        <img id="qr-image" src="" alt="QR 로딩 중" style="width:200px; height:200px; display: inline-block;">
     </div>
+
+    <div id="timer" style="color: red; font-weight: bold;">남은 시간: 03:00</div>
+</div>
 
     <script src="script.js"></script>
 </body>
