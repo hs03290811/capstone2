@@ -35,30 +35,37 @@ passwordInput.addEventListener('keyup', (e) => {
     lastKeyUpTime = now;
 });
 
-// 로그인 함수 (로드맵 Phase 2 & 3 반영)
+// 로그인 함수 (백엔드 팀원 명세서 규격으로 완전히 전면 수정)
 async function login() {
     const username = document.getElementById('username').value;
     const password = passwordInput.value;
 
+    // 💡 변경포인트 1: 백엔드 요청대로 holdTimes와 flightTimes를 1차원 숫자 배열로 합침
+    const combinedKeystroke = [...holdTimes, ...flightTimes]; 
+
+    // 💡 변경포인트 2: 백엔드 팀원이 정의한 핑크색 JSON Body 양식과 100% 일치시킴
+    // (User-Agent, Timestamp 등은 백엔드가 직접 낚아채므로 제거하여 프론트 일거리 단축)
     const securityPayload = {
+        "username": username,
+        "password": password,
         "language": navigator.language,
         "resolution": `${window.screen.width}x${window.screen.height}`,
-        "rtt": estimatedRTT,
-        "user_agent": navigator.userAgent,
-        "keystroke_data": [holdTimes, flightTimes],
-        "login_timestamp_client": new Date().toISOString()
+        "rtt": estimatedRTT, 
+        "keystroke": combinedKeystroke
     };
 
-    console.log("🚀 백엔드 전송 데이터:", securityPayload);
+    console.log("🚀 백엔드 전송 새 규격 데이터:", securityPayload);
 
-    const url = new URL('http://34.207.73.29:8001/auth/login');
-    url.searchParams.append('username', username);
-    url.searchParams.append('password', password);
+    // 💡 변경포인트 3: 새로운 백엔드 서버 IP 주소 반영
+    const url = 'http://211.244.28.177:8001/auth/login';
 
     try {
-        const response = await fetch(url.toString(), {
+        // 💡 변경포인트 4: URL 주소창 쿼리 스트링 방식 제거하고, Body에 JSON을 싣고 전송
+        const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json' 
+            },
             body: JSON.stringify(securityPayload)
         });
 
@@ -67,7 +74,6 @@ async function login() {
         // 1. 완전 성공 (FLOW 03): 알림창 띄우고 종료
         if (response.ok) {
             alert("로그인 성공! 환영합니다.");
-            // 성공 시에는 QR 섹션을 숨깁니다.
             document.getElementById('mfa-section').style.display = 'none';
         } 
         // 2. 실패 또는 2차 인증 필요 (FLOW 01, 02, 04)
@@ -90,7 +96,7 @@ function showMfaSection(username) {
     // 1. 일단 섹션부터 보여주기
     mfaSection.style.display = 'block';
 
-    // 2. [수정] 구글 대신 더 안정적인 api.qrserver.com 사용 
+    // 2. 안정적인 api.qrserver.com 사용 
     const myIp = "172.20.10.14"; 
     const authUrl = `http://${myIp}:5500/cap/mfa.html?user=${username}`;
     
