@@ -57,7 +57,7 @@ async function login() {
     console.log("🚀 백엔드 전송 새 규격 데이터:", securityPayload);
 
     // 💡 변경포인트 3: 새로운 백엔드 서버 IP 주소 반영
-    const url = 'http://211.244.28.177:8001/auth/login';
+    const url = 'http://34.207.73.29:8001/auth/login';
 
     try {
         // 💡 변경포인트 4: URL 주소창 쿼리 스트링 방식 제거하고, Body에 JSON을 싣고 전송
