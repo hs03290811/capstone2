@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+redis
+python-dotenv
+bcrypt
+passlib[bcrypt]
+python-jose[cryptography]
+python-socketio
+fastapi-socketio
+user-agents
+pandas
+scikit-learn
+scipy
