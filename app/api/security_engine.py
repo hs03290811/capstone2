@@ -9,7 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.spatial.distance import cityblock
 
 # =========================================================================
-# 🗄️ [REAL DB CONNECTION] 가짜 함수를 걷어내고 실제 DB 연동 파이프라인 구축
+# 🗄️ [REAL DB CONNECTION] 실제 DB 조회를 수행하는 파이프라인 함수
 # =========================================================================
 
 def fetch_past_keystrokes_from_db(user_id: int, db: Session, limit=50):
@@ -39,7 +39,7 @@ def fetch_rba_training_data_from_db(db: Session):
 
 
 # =========================================================================
-# 🧠 [SECURITY ENGINE] 복합 보안인증 핵심 알고리즘 (실전 DB & 파라미터 결합)
+# 🧠 [SECURITY ENGINE] 복합 보안인증 핵심 알고리즘 (에포크 타임스탬프 최적화 버전)
 # =========================================================================
 def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=2.5):
     """
@@ -81,9 +81,12 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
             try:
                 rba_raw_data = pd.read_csv("rba_ready_to_train.csv")
             except Exception:
-                # CSV 백업본도 없는 경우 가상 스케일링 데이터셋 즉석 매핑
-                rba_raw_data = pd.DataFrame([incoming_context] * 10)
-                rba_raw_data['user_id'] = user_id
+                try:
+                    rba_raw_data = pd.read_csv("rba_clean.csv")
+                except Exception:
+                    # CSV 백업본도 없는 경우 가상 스케일링 데이터셋 즉석 매핑
+                    rba_raw_data = pd.DataFrame([incoming_context] * 10)
+                    rba_raw_data['user_id'] = user_id
 
         df_ml = rba_raw_data.copy()
 
@@ -101,11 +104,20 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
         }
         df_ml = df_ml.rename(columns=column_mapping)
 
-        # 시간 파싱 최적화
+        # 💡 [하이브리드 시간 파싱 변환] 에포크(초 단위 숫자) 파싱을 1순위로 저격 처리
         if 'login_timestamp' in df_ml.columns:
-            df_ml['Hour'] = pd.to_datetime(df_ml['login_timestamp']).dt.hour
+            try:
+                df_ml['Hour'] = pd.to_datetime(df_ml['login_timestamp']).dt.hour
+            except Exception:
+                df_ml['Hour'] = pd.to_datetime(df_ml['login_timestamp'], unit='s').dt.hour
+                
         elif 'Login Timestamp' in df_ml.columns:
-            df_ml['Hour'] = pd.to_datetime(df_ml['Login Timestamp'], unit='s').dt.hour
+            try:
+                # 에포크 초 단위 숫자를 가장 먼저 시도
+                df_ml['Hour'] = pd.to_datetime(df_ml['Login Timestamp'], unit='s').dt.hour
+            except Exception:
+                # 실패 시 일반 문자열 날짜 포맷으로 예외 우회 파싱
+                df_ml['Hour'] = pd.to_datetime(df_ml['Login Timestamp']).dt.hour
         else:
             df_ml['Hour'] = datetime.now().hour
 
