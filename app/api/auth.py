@@ -7,8 +7,8 @@ import asyncio
 import json
 from pydantic import BaseModel, Field
 
-# 💡 외부 분리한 실전형 AI 보안 엔진 임포트
-from app.api.security_engine import verify_security_payload
+# 💡 외부 분리한 실전형 AI 보안 엔진 및 희서님이 만든 미니 캐시 적재 함수 임포트
+from app.api.security_engine import verify_security_payload, insert_and_manage_rba_cache
 
 from app.core.database import get_db
 from app.models.models import User, RiskLog, UserSession, KeystrokeLog
@@ -171,6 +171,31 @@ async def login(
         
         db.commit()
         print(f"💾 [Postgres] RBA AI 분석 데이터 및 키스트로크 분리 이원화 적재 완료! (상태: {login_status})")
+
+        # ========================================================
+        # 🎯 [희서님의 긴급 미션] 정상 로그인 성공 시 민성님 미니 캐시 테이블 적재 가동!
+        # ========================================================
+        if login_status in ["ALLOWED", "KICKED_OUT"]:
+            cache_payload = {
+                "login_timestamp": int(datetime.now().timestamp()),
+                "user_id": user.id,
+                "rtt": float(payload.rtt),
+                "ip_address": current_ip,
+                "country": detected_country,
+                "region": detected_region,
+                "city": detected_city,
+                "asn": detected_asn,
+                "user_agent_string": user_agent_str,
+                "browser_name_version": browser_info,
+                "os_name_version": os_info,
+                "device_type": device_type,
+                "login_successful": True,
+                "resolution": payload.resolution,
+                "language": payload.language
+            }
+            # 슬라이딩 윈도우 스케일링 오토 트리거 시동!
+            insert_and_manage_rba_cache(user_id=user.id, payload=cache_payload, db=db)
+            print(f"🚀 [Cache Window] 민성님 전용 AI 미니 캐시 테이블 적재 및 300개 스케일링 마감 완료!")
         
     except Exception as db_err:
         db.rollback()

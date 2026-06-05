@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, JSON, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -16,7 +16,7 @@ class User(Base):
     last_ip = Column(String, nullable=True)        
     last_device = Column(String, nullable=True)    
     
-    logs = relationship("RiskLog", back_populates="owner")
+    logs = relationship("RiskLog", back_populates="owner", primaryjoin="User.id == RiskLog.user_id", foreign_keys="RiskLog.user_id")
     sessions = relationship("UserSession", back_populates="owner")
 
 
@@ -36,38 +36,33 @@ class UserSession(Base):
 class RiskLog(Base):
     __tablename__ = "risk_logs"
 
-    # 피드백 주신 17가지 내역 명확하게 컬럼 매핑
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True) # index (부모 고유 PK)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True)          # User ID
-    login_timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Login Timestamp
-    rtt = Column(Integer, nullable=True)                                   # Round-Trip Time [ms]
-    ip_address = Column(String, index=True)                                # IP Address
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True) 
+    user_id = Column(BigInteger, index=True) # 💡 DB 아키텍처 튜닝: 거대 해시 ID 수용을 위한 BIGINT 매핑 (외래키 제약 제거 반영)
+    login_timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True) 
+    rtt = Column(Float, nullable=True) # 💡 DB 아키텍처 튜닝: 소수점(.0) 포함 데이터 수용을 위한 Float 매핑
+    ip_address = Column(String, index=True)                                
     
-    # [Phase 4 보강 데이터] 위치 정보 영역
-    country = Column(String, default="Unknown")                            # Country
-    region = Column(String, default="Unknown")                             # Region
-    city = Column(String, default="Unknown")                               # City
-    asn = Column(String, default="Unknown")                                # ASN
+    owner = relationship("User", back_populates="logs", primaryjoin="User.id == RiskLog.user_id", foreign_keys="RiskLog.user_id")
+
+    country = Column(String, default="Unknown")                            
+    region = Column(String, default="Unknown")                             
+    city = Column(String, default="Unknown")                               
+    asn = Column(String, default="Unknown")                                
     
-    # [Phase 3 파싱 데이터] 기기 정보 영역
-    user_agent_string = Column(String, nullable=False)                     # User Agent String
-    browser_name_version = Column(String, nullable=True)                   # Browser Name and Version
-    os_name_version = Column(String, nullable=True)                        # OS Name and Version
-    device_type = Column(String, nullable=True)                            # Device Type
+    user_agent_string = Column(String, nullable=False)                     
+    browser_name_version = Column(String, nullable=True)                   
+    os_name_version = Column(String, nullable=True)                        
+    device_type = Column(String, nullable=True)                            
     
-    # [Phase 2 프론트 수집 데이터] 및 기타 상태
-    login_successful = Column(Boolean, default=True)                       # Login Successful
-    resolution = Column(String, nullable=True)                             # 해상도
-    language = Column(String, nullable=True)                               # 언어
+    login_successful = Column(Boolean, default=True)                       
+    resolution = Column(String, nullable=True)                             
+    language = Column(String, nullable=True)                               
     
-    # 내부 제어용 점수 및 상태 필드
-    status = Column(String)                                                # ALLOWED, KICKED_OUT 등
+    status = Column(String)                                                
     rba_score = Column(Float, default=0.0)                       
     ai_score = Column(Float, default=0.0)                        
 
-    owner = relationship("User", back_populates="logs")
-    
-    # 🎯 키스트로크 분리 테이블과의 관계선언 (1:1 구조 매핑)
+    owner = relationship("User", primaryjoin="RiskLog.user_id==User.id", foreign_keys=[user_id], remote_side=[User.id], viewonly=True)
     keystroke_data = relationship("KeystrokeLog", back_populates="log_reference", uselist=False)
 
 
@@ -75,12 +70,32 @@ class KeystrokeLog(Base):
     __tablename__ = "keystroke_logs"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
-    # 부모 RiskLog의 고유 id(index)를 참조하는 외래키 구조화
     risk_log_id = Column(Integer, ForeignKey("risk_logs.id"), unique=True, index=True) 
-    
-    # 🎯 키스트로크 데이터 실제 격리 저장소 (배열 형식을 유연하게 담는 JSON 타입 선언)
     keystroke_timing = Column(JSON, nullable=False) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     log_reference = relationship("RiskLog", back_populates="keystroke_data")
+
+
+# =========================================================================
+# 🚀 [MINSUNG'S REQUEST] 유민성 요청 반영 AI 학습 고속화용 미니 캐시 테이블
+# =========================================================================
+class RBAReadyToTrain(Base):
+    __tablename__ = "rba_ready_to_train"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    login_timestamp = Column(BigInteger, index=True) # 💡 데이터셋 내부의 다양한 에포크 타임 조회를 위한 인덱싱
+    user_id = Column(BigInteger, index=True)         # 💡 민성님 규격 거대 해시 수용용 BIGINT 적용
+    rtt = Column(Float, nullable=True)               # 💡 소수점 매핑
+    ip_address = Column(String(255))
+    country = Column(String(100), default="Unknown")
+    region = Column(String(100), default="Unknown")
+    city = Column(String(100), default="Unknown")
+    asn = Column(String(100), default="Unknown")
+    user_agent_string = Column(String, nullable=True)
+    browser_name_version = Column(String(255))
+    os_name_version = Column(String(255))
+    device_type = Column(String(50))
+    login_successful = Column(Boolean, default=True)
+    resolution = Column(String(50))
+    language = Column(String(50))
