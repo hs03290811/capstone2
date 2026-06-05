@@ -1,28 +1,40 @@
 ﻿<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>보안 로그인 테스트</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
-    <h1>🔒 보안 로그인 시스템</h1>
-    <input type="text" id="username" placeholder="아이디">
-    <input type="password" id="password" placeholder="비밀번호">
-    <button onclick="login()">로그인</button>
+<body style="position: relative; min-height: 100vh; margin: 0; background-color: #f5f7fa;">
 
-
-<div id="mfa-section" style="display:none; text-align: center;">
-    <hr>
-    <h3>📱 2단계 인증이 필요합니다</h3>
-    <p>등록된 모바일 기기에서 QR 코드를 스캔하세요.</p>
-    
-    <!-- 🚀 이 태그가 핵심입니다 -->
-    <div style="margin: 20px 0;">
-        <img id="qr-image" src="" alt="QR 로딩 중" style="width:200px; height:200px; display: inline-block;">
+    <div id="chart-overlay-wrapper" style="position: fixed; top: 100px; right: 460px; width: 550px; height: 190px; background: rgba(255, 255, 255, 0.98); border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); padding: 15px; z-index: 100;">
+        <div style="font-size: 0.85em; font-weight: bold; color: #334155; margin-bottom: 8px; text-align: left; padding-left: 5px;">📊 실시간 키스트로크 타이밍 분석 (Rate)</div>
+        <canvas id="keystrokeChart"></canvas>
     </div>
 
-    <div id="timer" style="color: red; font-weight: bold;">남은 시간: 03:00</div>
-</div>
+    <div class="login-container" style="max-width: 400px; margin: 100px auto; padding: 40px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center;">
+        
+        <h1>🔒 보안 로그인 시스템</h1>
+        <div style="margin-bottom: 15px;">
+            <input type="text" id="username" placeholder="아이디" style="width: 80%; padding: 10px; margin-bottom: 10px;">
+            <input type="password" id="password" placeholder="비밀번호" style="width: 80%; padding: 10px;">
+        </div>
+        <button onclick="login()" style="padding: 10px 30px; font-weight: bold; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">로그인</button>
+
+        <div id="mfa-section" style="display:none; margin-top: 20px;">
+            <hr style="border: 0; height: 1px; background: #eee; margin: 20px 0;">
+            <h3>📱 2단계 인증이 필요합니다</h3>
+            <p style="font-size: 0.9em; color: #666;">등록된 모바일 기기에서 QR 코드를 스캔하세요.</p>
+            
+            <div style="margin: 20px 0;">
+                <img id="qr-image" src="" alt="QR 로딩 중" style="width:200px; height:200px; display: inline-block;">
+            </div>
+
+            <div id="timer" style="color: red; font-weight: bold;">남은 시간: 03:00</div>
+        </div>
+
+    </div>
 
     <script src="script.js"></script>
 </body>
