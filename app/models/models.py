@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, JSON, BigInteger
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, JSON, BigInteger, Text  # 💡 Text 추가 임포트
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -42,8 +42,6 @@ class RiskLog(Base):
     rtt = Column(Float, nullable=True) # 💡 DB 아키텍처 튜닝: 소수점(.0) 포함 데이터 수용을 위한 Float 매핑
     ip_address = Column(String, index=True)                                
     
-    owner = relationship("User", back_populates="logs", primaryjoin="User.id == RiskLog.user_id", foreign_keys="RiskLog.user_id")
-
     country = Column(String, default="Unknown")                            
     region = Column(String, default="Unknown")                             
     city = Column(String, default="Unknown")                               
@@ -99,3 +97,20 @@ class RBAReadyToTrain(Base):
     login_successful = Column(Boolean, default=True)
     resolution = Column(String(50))
     language = Column(String(50))
+
+
+# =========================================================================
+# 🎯 [HEESEO'S REQUEST] 회원가입용 15회 정품 키스트로크 프로필 영구 보관 테이블
+# =========================================================================
+class UserKeystrokeProfile(Base):
+    __tablename__ = "user_keystroke_profiles"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # ✅ 정품 users.id 와 정확히 매핑 확인
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    
+    # ✅ 15세트 데이터 압축을 위한 수용 컬럼
+    raw_profile_data = Column(Text, nullable=False)
+    
+    # ✅ [누락 검증 완수] DB 적재 시각 오토 스탬프 정상 추가!
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
