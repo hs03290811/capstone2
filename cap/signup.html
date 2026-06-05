@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>보안 회원가입 및 타자 프로필 등록</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .profile-section { background: #f9f9f9; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px dashed #ccc; }
+        .target-sentence { background: #e3f2fd; color: #0d47a1; padding: 10px; font-weight: bold; font-family: sans-serif; display: inline-block; margin-bottom: 10px; border-radius: 4px; }
+        .counter-badge { color: blue; font-weight: bold; font-size: 1.1em; }
+        #register-btn:disabled { background-color: #cccccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>📝 보안 회원가입 시스템</h1>
+    
+    <div>
+        <input type="text" id="username" placeholder="아이디(ID)"><br><br>
+        <input type="password" id="password" placeholder="비밀번호(PW)"><br><br>
+    </div>
+
+    <div class="profile-section">
+        <h3>💡 사용자 타자 지문(프로필) 등록</h3>
+        <p>위에 입력한 <b>본인의 비밀번호(PW)</b>와 똑같이 입력창에 타이핑 후 <b>[엔터(Enter)]</b>를 눌러주세요.</p>
+        
+        <div class="target-sentence" id="target-phrase">정확한 보안 분석을 위해, <b>본인의 평소 타이핑 리듬에 맞춰</b> 위의 비밀번호와 똑같이 입력해 주세요!</div><br>
+        
+        <input type="text" id="keystroke-input" placeholder="위의 비밀번호를 똑같이 반복해서 입력하세요" style="width: 300px;" autocomplete="off"><br><br>
+        
+        <div id="status-counter">정상 타이핑 등록 성공: <span id="success-count" class="counter-badge">0</span> / 15회</div>
+    </div>
+
+    <br>
+    <button id="register-btn" onclick="submitSignup()" disabled style="padding: 10px 20px; font-size: 1em;">회원가입 완료</button>
+
+    <script src="signup.js"></script>
+</body>
+</html>

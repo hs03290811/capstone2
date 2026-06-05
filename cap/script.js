@@ -127,7 +127,7 @@ async function login() {
         console.log("🚀새 규격 데이터:", securityPayload);
 
         // 희서님(백엔드) 서버 주소 유지
-        const url = 'http://34.207.73.29:8001/auth/login';
+        const url = 'http://32.197.121.164:8001/auth/login';
 
         const response = await fetch(url, {
             method: 'POST',
