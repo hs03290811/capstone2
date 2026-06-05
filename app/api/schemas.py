@@ -1,14 +1,12 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Any
 
-# 1. 단일 키스트로크 이벤트 규격
-class KeystrokeEventDTO(BaseModel):
+class KeystrokeEvent(BaseModel):
     key: str
-    event: str  # "down" 또는 "up"
-    time: int   # 밀리초(ms) 단위 타임스탬프
+    event: str
+    time: int
 
-# 2. 회원가입 요청 전체 규격 (15세트 수용)
 class UserRegisterWithKeystrokeDTO(BaseModel):
     username: str
     password: str
-    keystroke_profiles: List[List[KeystrokeEventDTO]] # ✅ 2차원 리스트 정상 매핑
+    keystroke_profiles: List[List[KeystrokeEvent]] # 👈 객체 배열 구조로 통일

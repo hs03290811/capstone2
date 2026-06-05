@@ -163,9 +163,10 @@ async def login(
             print(f"❌ 킥아웃 발송 중 에러: {e}")
 
     try:
+        # 필드 검증: RiskLog 테이블에 실제로 존재하는 컬럼만 명시
         new_log = RiskLog(
             user_id=user.id,
-            rtt=payload.rtt,
+            rtt=float(payload.rtt),
             ip_address=current_ip,
             country=detected_country,
             region=detected_region,
@@ -176,14 +177,11 @@ async def login(
             os_name_version=os_info,
             device_type=device_type,
             login_successful=(login_status in ["ALLOWED", "KICKED_OUT", "MFA_REQUIRED"]),
-            resolution=payload.resolution,
-            language=payload.language,
             status=login_status,
-            rba_score=float(1.0 - ai_score), 
             ai_score=ai_score
         )
         db.add(new_log)
-        db.flush() 
+        db.flush()
 
         new_keystroke_log = KeystrokeLog(
             risk_log_id=new_log.id,             
@@ -218,8 +216,9 @@ async def login(
         
     except Exception as db_err:
         db.rollback()
-        raise HTTPException(status_code=500, detail="서버 내부 데이터베이스 처리 오류")
-
+        # 💡 [필수 패치] 진짜 에러 메시지를 뿜도록 변경하여 억까 방지
+        raise HTTPException(status_code=500, detail=f"DB 적재 실패: {str(db_err)}")
+        
     telemetry_data = security_result.get("telemetry", {})
     
     keystroke_info = telemetry_data.get("keystroke", {})

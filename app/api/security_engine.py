@@ -44,15 +44,16 @@ def fetch_past_keystrokes_from_db(user_id: int, db: Session, incoming_len: int =
             processed_dataset = []
             for session in profiles_dict:
                 if isinstance(session, list):
+                    # 💡 JSON 객체에서 'time' 필드만 정확히 추출
                     timestamps = [event.get('time', 0) if isinstance(event, dict) else event for event in session]
                     processed_dataset.append(np.resize(timestamps, incoming_len).tolist())
             if processed_dataset:
                 return np.array(processed_dataset)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"DEBUG: 파싱 에러 {e}")
     return np.array([[100, 210, 305, 420, 515, 630, 725, 840, 950]] * 15)
 
-def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=2.5):
+def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=3):
     try:
         if not incoming_keystroke or len(incoming_keystroke) == 0:
             incoming_keystroke = [100, 210, 305, 420, 515, 630, 725, 840, 950]
