@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from scipy.spatial.distance import cityblock
 from sqlalchemy import Column, Integer, String, BigInteger, Float, Boolean
+from sklearn.preprocessing import StandardScaler
 
 try:
     from sqlalchemy.orm import declarative_base
@@ -44,9 +45,11 @@ def fetch_past_keystrokes_from_db(user_id: int, db: Session, incoming_len: int =
             processed_dataset = []
             for session in profiles_dict:
                 if isinstance(session, list):
-                    # 💡 JSON 객체에서 'time' 필드만 정확히 추출
                     timestamps = [event.get('time', 0) if isinstance(event, dict) else event for event in session]
-                    processed_dataset.append(np.resize(timestamps, incoming_len).tolist())
+                    # 고정된 길이로 패딩 처리
+                    data = list(timestamps)
+                    if len(data) < incoming_len: data.extend([0] * (incoming_len - len(data)))
+                    processed_dataset.append(data[:incoming_len])
             if processed_dataset:
                 return np.array(processed_dataset)
     except Exception as e:
@@ -55,148 +58,77 @@ def fetch_past_keystrokes_from_db(user_id: int, db: Session, incoming_len: int =
 
 def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=3):
     try:
-        if not incoming_keystroke or len(incoming_keystroke) == 0:
-            incoming_keystroke = [100, 210, 305, 420, 515, 630, 725, 840, 950]
+        if not incoming_keystroke: incoming_keystroke = [100, 210, 305, 420, 515, 630, 725, 840, 950]
+        
+        # 1. 학습 데이터 로드
+        X_train_key = fetch_past_keystrokes_from_db(user_id, db, incoming_len=len(incoming_keystroke))
+        
+        # 2. 데이터 패딩 처리 (resize 대신)
+        target_len = X_train_key.shape[1]
+        processed_input = np.zeros(target_len)
+        input_data = np.array(incoming_keystroke)
+        processed_input[:min(len(input_data), target_len)] = input_data[:min(len(input_data), target_len)]
+        X_test_key = processed_input.reshape(1, -1)
             
-        incoming_len = len(incoming_keystroke)
-        
-        # 1. 기하 평균 벡터 로드 및 실제 수학적 오차율(MAE) 연산 구역
-        X_train_key = fetch_past_keystrokes_from_db(user_id, db, incoming_len=incoming_len)
-        raw_mean_vector = np.mean(X_train_key, axis=0).round(4).tolist()
-        
-        incoming_keystroke_arr = np.array(incoming_keystroke)
-        baseline_arr = np.array(raw_mean_vector)
-        mean_diff = float(np.mean(np.abs(incoming_keystroke_arr - baseline_arr)))
-        
-        # 동적 임계값 기초 연산 바인딩 유지
-        X_test_key = np.array(incoming_keystroke).reshape(1, -1)
-        num_features = X_train_key.shape[1]
-        if X_test_key.shape[1] != num_features:
-            X_test_key = np.resize(X_test_key, (1, num_features))
-        from sklearn.preprocessing import StandardScaler
+        # 3. 고정된 기준점 기반 스케일링 (fit_transform 후 transform 사용)
         key_scaler = StandardScaler()
         X_train_key_scaled = key_scaler.fit_transform(X_train_key)
         X_test_key_scaled = key_scaler.transform(X_test_key)
-        scaled_mean_vector = np.mean(X_train_key_scaled, axis=0).reshape(1, -1)
-        train_distances = [cityblock(row, scaled_mean_vector[0]) / num_features for row in X_train_key_scaled]
-        mu = np.mean(train_distances)
-        sigma = np.std(train_distances) if np.std(train_distances) > 0 else 1.0
-        dynamic_threshold = mu + (k * sigma)
-        current_key_dist = cityblock(X_test_key_scaled[0], scaled_mean_vector[0]) / num_features
-
-        # 2. 순수 통계 프로파일링 대조 매칭 스코어링 아키텍처 (야매 가라 텍스트 분기 완전 삭제)
-        match_count = 0
         
-        if incoming_context.get("country") in ["South Korea", "KR"]:
-            match_count += 1
-        if incoming_context.get("region") == "Seoul":
-            match_count += 1
-        if incoming_context.get("city") == "Seoul":
-            match_count += 1
-        if any(x in incoming_context.get("asn", "") for x in ["SK Broadband", "AS9318"]):
-            match_count += 1
-        if "Chrome" in incoming_context.get("browser_name_version", ""):
-            match_count += 1
-        if "Mac OS X" in incoming_context.get("os_name_version", ""):
-            match_count += 1
-        if incoming_context.get("device_type") == "Desktop":
-            match_count += 1
-        if incoming_context.get("resolution") == "1920x1080":
-            match_count += 1
-        if incoming_context.get("language") == "ko-KR":
-            match_count += 1
-            
+        # 4. 거리 계산 (안정적 연산)
+        scaled_mean = np.mean(X_train_key_scaled, axis=0)
+        current_key_dist = cityblock(X_test_key_scaled[0], scaled_mean) / target_len
+        
+        train_distances = [cityblock(row, scaled_mean) / target_len for row in X_train_key_scaled]
+        dynamic_threshold = np.mean(train_distances) + (k * np.std(train_distances) if np.std(train_distances) > 0 else 1.0)
+        
+        keystroke_success = bool(current_key_dist <= dynamic_threshold)
+
+        # 5. RBA 계산
+        match_count = sum([
+            1 if incoming_context.get("country") in ["South Korea", "KR"] else 0,
+            1 if incoming_context.get("region") == "Seoul" else 0,
+            1 if incoming_context.get("city") == "Seoul" else 0,
+            1 if any(x in incoming_context.get("asn", "") for x in ["SK Broadband", "AS9318"]) else 0,
+            1 if "Chrome" in incoming_context.get("browser_name_version", "") else 0,
+            1 if "Mac OS X" in incoming_context.get("os_name_version", "") else 0,
+            1 if incoming_context.get("device_type") == "Desktop" else 0,
+            1 if incoming_context.get("resolution") == "1920x1080" else 0,
+            1 if incoming_context.get("language") == "ko-KR" else 0
+        ])
+        
         rtt_val = float(incoming_context.get("rtt", 45))
         rtt_score = 1.0 if rtt_val <= 60 else (0.5 if rtt_val <= 150 else 0.0)
-        hour_score = 1.0
+        rba_prob = ((match_count + rtt_score + 1.0) / 11.0) * 100.0
         
-        # 총 11가지 환경 인자 요인의 일치율 수치화 (0% ~ 100%)
-        total_score = match_count + rtt_score + hour_score
-        rba_prob = (total_score / 11.0) * 100.0
-        
-        if rba_prob >= 80.0:
-            rba_tier = "안전(저위험군)"
-        elif rba_prob >= 30.0:
-            rba_tier = "애매(중위험군)"
-        else:
-            rba_tier = "실패(고위험군)"
-            
-        rba_importance_dict = {
-            "country": 0.4521 if rba_tier == "안전(저위험군)" else 0.6514,
-            "asn": 0.2814 if rba_tier == "안전(저위험군)" else 0.2105,
-            "Hour": 0.1105 if rba_tier == "안전(저위험군)" else 0.1381
-        }
+        if rba_prob >= 80.0: rba_tier = "안전(저위험군)"
+        elif rba_prob >= 30.0: rba_tier = "애매(중위험군)"
+        else: rba_tier = "불안전(고위험군)"
 
-        # 3. [DEFENSE MATRIX 의사결정 대통합 파이프라인] 장표 흐름도 사상 200% 정교 수렴
-        if rba_tier == "실패(고위험군)":
-            # 🔴 FLOW 04: 타이핑 불일치(실패) + 위험 환경(실패) ➔ 로그인 즉시 차단 (DENIED)
-            final_status = "DENIED"
-            display_message = "비정상적인 접속 환경 및 위협이 감지되어 계정을 임시 차단합니다."
-            keystroke_success = False
-            current_distance = 1.8451
-            dynamic_threshold = 0.5124
-        elif rba_tier == "애매(중위험군)":
-            # 🟣 FLOW 01: 타이핑 일치(성공) + 위험 환경(실패) ➔ 2차 인증 요구
-            final_status = "MFA_REQUIRED"
-            display_message = "타이핑 패턴이 불일치하거나 접속 환경 변경이 감지되어 2차 인증을 진행합니다."
-            keystroke_success = True
-            current_distance = 0.1245
-            dynamic_threshold = 0.5124
+        # 6. 6가지 시나리오 기반 의사결정 매트릭스
+        if keystroke_success:
+            final_status = "ALLOWED" if rba_tier != "불안전(고위험군)" else "MFA_REQUIRED"
         else:
-            # 안전 환경 감지 성공 구역 (South Korea 대조군 영역)
-            if mean_diff < 25.0:
-                # 🟢 FLOW 03: 타이핑 일치(성공) + 안전 환경(성공) ➔ 로그인 허용 승인 (ALLOWED)
-                final_status = "ALLOWED"
-                display_message = "정상적인 접속 행동이 확인되어 로그인을 승인합니다."
-                keystroke_success = True
-                current_distance = 0.1245
-                dynamic_threshold = 0.5124
-            elif mean_diff <= 150.0:
-                # 🔵 FLOW 02 [Low Risk 판단]: 타이핑 불일치(실패) + 안전 환경(성공) ➔ 로그인 허용 승인 (ALLOWED)
-                final_status = "ALLOWED"
-                display_message = "정상적인 접속 행동이 확인되어 로그인을 승인합니다."
-                keystroke_success = True  
-                current_distance = 0.3842
-                dynamic_threshold = 0.5124
-                rba_prob = 88.5
-            else:
-                # 🔵 FLOW 02 [High Risk 판단]: 타이핑 불일치(실패) + 안전 환경(성공) ➔ 2차 인증 요구 (MFA_REQUIRED)
-                final_status = "MFA_REQUIRED"
-                display_message = "타이핑 패턴이 불일치하거나 접속 환경 변경이 감지되어 2차 인증을 진행합니다."
-                keystroke_success = False
-                current_distance = 1.4851
-                dynamic_threshold = 0.5124
-                rba_prob = 91.8
+            if rba_tier == "안전(저위험군)": final_status = "ALLOWED"
+            elif rba_tier == "애매(중위험군)": final_status = "MFA_REQUIRED"
+            else: final_status = "DENIED"
 
         return {
             "status": final_status,
-            "message": display_message,
+            "message": "보안 연산 완료",
             "ai_score": float(round(rba_prob / 100.0, 2)),
             "telemetry": {
                 "keystroke": {
                     "success": keystroke_success,
-                    "current_distance": float(round(current_distance, 4)),
+                    "current_distance": float(round(current_key_dist, 4)),
                     "dynamic_threshold": float(round(dynamic_threshold, 4)),
-                    "k_value": float(k),
-                    "mean_vector": raw_mean_vector
+                    "k_value": float(k)
                 },
-                "rba": {
-                    "risk_tier": rba_tier,
-                    "genuine_probability": f"{rba_prob:.1f}%",
-                    "important_factors": rba_importance_dict
-                }
+                "rba": {"risk_tier": rba_tier, "genuine_probability": f"{rba_prob:.1f}%"}
             }
         }
     except Exception as e:
-        return {
-            "status": "MFA_REQUIRED",
-            "message": f"안전 보정 구동: {e}",
-            "ai_score": 0.5,
-            "telemetry": {
-                "keystroke": {"success": False, "current_distance": 0.99, "dynamic_threshold": 0.51, "k_value": float(k), "mean_vector": [100, 210, 305, 420, 515, 630, 725, 840, 950]},
-                "rba": {"risk_tier": "안전(저위험군)", "genuine_probability": "100.0%", "important_factors": {"rtt": 1.0}}
-            }
-        }
+        return {"status": "MFA_REQUIRED", "message": f"Error: {e}"}
 
 def insert_and_manage_rba_cache(user_id: int, payload: dict, db: Session):
     try:
@@ -215,10 +147,6 @@ def insert_and_manage_rba_cache(user_id: int, payload: dict, db: Session):
         )
         db.add(new_cache)
         db.flush()
-        excess_records = db.query(RBAReadyToTrain).filter(RBAReadyToTrain.user_id == user_id).order_by(RBAReadyToTrain.login_timestamp.desc()).offset(300).all()
-        if excess_records:
-            for record in excess_records:
-                db.delete(record)
         db.commit()
     except Exception:
         db.rollback()
