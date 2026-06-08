@@ -326,7 +326,7 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 df_ml['Target'] = (df_ml['user_id'] == user_id).astype(int)
 
                 # 분석에서 제외할 고유 식별 필드 및 타겟 드롭
-                drop_columns = ['user_id', 'Target', 'login_timestamp', 'ip_address']
+                drop_columns = ['user_id', 'Target', 'login_timestamp', 'ip_address','region','login_successful']
                 X_all = df_ml.drop(columns=drop_columns, errors='ignore')
                 y_all = df_ml['Target']
 
