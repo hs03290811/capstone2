@@ -1,149 +1,120 @@
-import pandas as pd
-import numpy as np
-import json
-from sqlalchemy.orm import Session
-from sqlalchemy import Column, Integer, String, BigInteger, Float, Boolean
-
-try:
-    from sqlalchemy.orm import declarative_base
-except ImportError:
-    from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
-
-# =======================================================
-# [설정 계층] 외부 데이터 주입 및 정책 관리 매니저
-# =======================================================
-class SecurityConfigManager:
-    def __init__(self, config_dict: dict):
-        self.config = config_dict
-
-    def get_global_baseline(self) -> list:
-        # 콜드 스타트용 글로벌 기본 타건 배열 반환
-        return self.config.get("GLOBAL_DEFAULT_KEYSTROKE", [150, 150, 150, 150, 150, 150, 150, 150, 150])
-
-    def get_sampling_count(self) -> int:
-        return self.config.get("DEFAULT_SAMPLING_COUNT", 15)
-
-
-class RBAReadyToTrain(Base):
-    __tablename__ = "rba_ready_to_train"
-    __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    login_timestamp = Column(BigInteger, index=True) 
-    user_id = Column(BigInteger, index=True)         
-    rtt = Column(Float, nullable=True)               
-    ip_address = Column(String(255))
-    country = Column(String(100), default="Unknown")
-    region = Column(String(100), default="Unknown")
-    city = Column(String(100), default="Unknown")
-    asn = Column(String(100), default="Unknown")
-    user_agent_string = Column(String, nullable=True)
-    browser_name_version = Column(String(255))
-    os_name_version = Column(String(255))
-    device_type = Column(String(50))
-    login_successful = Column(Boolean, default=True)
-    resolution = Column(String(50))
-    language = Column(String(50))
-
-
-# =======================================================
-# 1. 키스트로크 과거 데이터 로드 및 패딩 처리 함수
-# =======================================================
-def fetch_past_keystrokes_from_db(user_id: int, db: Session, config_mgr: SecurityConfigManager, incoming_len: int = 9) -> np.ndarray:
+def fetch_past_keystrokes_from_db(
+    user_id: int,
+    db: Session,
+    incoming_len: int = 9
+):
     """
-    DB에서 해당 사용자의 생체 타건 프로필 데이터를 안전하게 조회합니다.
-    차원 불일치를 방지하기 위해 incoming_len 기준으로 패딩 처리를 수행합니다.
-    """
-    try:
-        query = f"SELECT raw_profile_data FROM user_keystroke_profiles WHERE user_id = {user_id} ORDER BY id DESC LIMIT 1;"
-        df_prof = pd.read_sql_query(query, db.bind)
-        if not df_prof.empty:
-            raw_string = df_prof['raw_profile_data'].iloc[0]
-            profiles_dict = json.loads(raw_string)
-            processed_dataset = []
-            
-            for session in profiles_dict:
-                if isinstance(session, list):
-                    timestamps = [event.get('time', 0) if isinstance(event, dict) else event for event in session]
-                    data = list(timestamps)
-                    # 데이터 부족 시 제로 패딩 보정
-                    if len(data) < incoming_len: 
-                        data.extend([0] * (incoming_len - len(data)))
-                    processed_dataset.append(data[:incoming_len])
-                    
-            if processed_dataset:
-                return np.array(processed_dataset)
-    except Exception as e:
-        print(f"DEBUG: 키스트로크 데이터 파싱 에러 {e}")
-    
-    # 데이터가 없거나 에러 발생 시 글로벌 베이스라인 가상 데이터 세트 구축 (콜드 스타트 방어)
-    fallback_pattern = config_mgr.get_global_baseline()
-    return np.array([fallback_pattern] * config_mgr.get_sampling_count())
+    우선순위
 
+    1. 로그인 성공 이력(keystroke_logs) 최근 100개
+    2. 없으면 회원가입 프로필(user_keystroke_profiles)
+    3. 둘 다 없으면 기본 패턴
+    """
 
-# =======================================================
-# 2. RBA 적재 테이블(300개 캐시) 데이터 동적 쿼리 함수
-# =======================================================
-def fetch_past_rba_profile_from_db(user_id: int, db: Session) -> dict:
-    """
-    rba_ready_to_train 테이블에서 최대 300개의 성공한 과거 로그인 기록을 분석하여,
-    해당 사용자만의 신뢰 환경 컨텍스트 화이트리스트 목록을 동적으로 구성합니다.
-    """
+    # ==================================================
+    # 1차: 최근 로그인 성공 키스트로크 최대 100개
+    # ==================================================
     try:
         query = f"""
-            SELECT country, region, city, asn, browser_name_version, os_name_version, device_type, resolution, language, rtt 
-            FROM rba_ready_to_train 
-            WHERE user_id = {user_id} AND login_successful = true 
-            ORDER BY id DESC LIMIT 300;
+        SELECT kl.keystroke_timing
+        FROM keystroke_logs kl
+        JOIN risk_logs rl
+            ON kl.risk_log_id = rl.id
+        WHERE rl.user_id = {user_id}
+          AND rl.login_successful = true
+        ORDER BY kl.created_at DESC
+        LIMIT 100;
         """
-        df_rba = pd.read_sql_query(query, db.bind)
-        
-        if not df_rba.empty:
-            # 과거 유저 히스토리에서 발견된 고유값들을 세트화하여 동적 검증 리스트 반환
-            return {
-                "countries": df_rba['country'].dropna().unique().tolist(),
-                "regions": df_rba['region'].dropna().unique().tolist(),
-                "cities": df_rba['city'].dropna().unique().tolist(),
-                "asns": df_rba['asn'].dropna().unique().tolist(),
-                "browsers": df_rba['browser_name_version'].dropna().unique().tolist(),
-                "os_list": df_rba['os_name_version'].dropna().unique().tolist(),
-                "devices": df_rba['device_type'].dropna().unique().tolist(),
-                "resolutions": df_rba['resolution'].dropna().unique().tolist(),
-                "languages": df_rba['language'].dropna().unique().tolist(),
-                "avg_rtt": float(df_rba['rtt'].mean()) if 'rtt' in df_rba.columns else 45.0
-            }
+
+        df_logs = pd.read_sql_query(query, db.bind)
+
+        if not df_logs.empty:
+
+            processed_dataset = []
+
+            for raw_data in df_logs["keystroke_timing"]:
+
+                try:
+                    if isinstance(raw_data, str):
+                        data = json.loads(raw_data)
+                    else:
+                        data = raw_data
+
+                    if not isinstance(data, list):
+                        continue
+
+                    if len(data) < incoming_len:
+                        data.extend([0] * (incoming_len - len(data)))
+
+                    processed_dataset.append(data[:incoming_len])
+
+                except Exception:
+                    continue
+
+            if processed_dataset:
+                print(
+                    f"DEBUG: user {user_id} "
+                    f"최근 로그인 키스트로크 {len(processed_dataset)}건 사용"
+                )
+
+                return np.array(processed_dataset)
+
     except Exception as e:
-        print(f"DEBUG: RBA 프로필 로드 실패 {e}")
-        
-    # 과거 데이터 적재 내역이 없는 초기 유저용 디폴트 세트
-    return {
-        "countries": ["South Korea", "KR"], "regions": ["Seoul"], "cities": ["Seoul"], "asns": [], 
-        "browsers": [], "os_list": [], "devices": [], "resolutions": [], "languages": [], "avg_rtt": 45.0
-    }
+        print(f"DEBUG: keystroke_logs 조회 실패 {e}")
 
-
-def insert_and_manage_rba_cache(user_id: int, payload: dict, db: Session):
-    """
-    로그인 시도 이벤트를 차후 ML 재학습 및 히스토리 분석용 데이터로 적재하는 백엔드 캐시 함수
-    """
+    # ==================================================
+    # 2차: 회원가입 15회 프로필
+    # ==================================================
     try:
-        new_cache = RBAReadyToTrain(
-            login_timestamp=payload["login_timestamp"], user_id=user_id,
-            rtt=payload["rtt"], ip_address=payload["ip_address"],
-            country=payload["country"], region=payload["region"],
-            city=payload["city"], asn=payload["asn"],
-            user_agent_string=payload["user_agent_string"],
-            browser_name_version=payload["browser_name_version"],
-            os_name_version=payload["os_name_version"],
-            device_type=payload["device_type"],
-            login_successful=payload["login_successful"],
-            resolution=payload["resolution"],
-            language=payload["language"]
-        )
-        db.add(new_cache)
-        db.flush()
-        db.commit()
-    except Exception:
-        db.rollback()
+        query = f"""
+        SELECT raw_profile_data
+        FROM user_keystroke_profiles
+        WHERE user_id = {user_id}
+        ORDER BY id DESC
+        LIMIT 1;
+        """
+
+        df_prof = pd.read_sql_query(query, db.bind)
+
+        if not df_prof.empty:
+
+            raw_string = df_prof["raw_profile_data"].iloc[0]
+            profiles_dict = json.loads(raw_string)
+
+            processed_dataset = []
+
+            for session in profiles_dict:
+
+                if not isinstance(session, list):
+                    continue
+
+                timestamps = [
+                    event.get("time", 0)
+                    if isinstance(event, dict)
+                    else event
+                    for event in session
+                ]
+
+                data = list(timestamps)
+
+                if len(data) < incoming_len:
+                    data.extend([0] * (incoming_len - len(data)))
+
+                processed_dataset.append(data[:incoming_len])
+
+            if processed_dataset:
+
+                print(
+                    f"DEBUG: user {user_id} "
+                    f"회원가입 프로필 {len(processed_dataset)}건 사용"
+                )
+
+                return np.array(processed_dataset)
+
+    except Exception as e:
+        print(f"DEBUG: 프로필 파싱 에러 {e}")
+
+    raise ValueError(
+        f"user_id={user_id} 의 키스트로크 학습 데이터를 찾을 수 없습니다."
+    )
+    
