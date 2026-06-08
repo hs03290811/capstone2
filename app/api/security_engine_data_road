@@ -4,66 +4,17 @@ def fetch_past_keystrokes_from_db(
     incoming_len: int = 9
 ):
     """
-    우선순위
+    학습 데이터 구성
 
-    1. 로그인 성공 이력(keystroke_logs) 최근 100개
-    2. 없으면 회원가입 프로필(user_keystroke_profiles)
-    3. 둘 다 없으면 기본 패턴
+    1. 회원가입 시 저장한 15회 프로필
+    2. 로그인 성공 이력(keystroke_logs)
+    3. 둘을 합쳐 최대 100개 유지
     """
 
-    # ==================================================
-    # 1차: 최근 로그인 성공 키스트로크 최대 100개
-    # ==================================================
-    try:
-        query = f"""
-        SELECT kl.keystroke_timing
-        FROM keystroke_logs kl
-        JOIN risk_logs rl
-            ON kl.risk_log_id = rl.id
-        WHERE rl.user_id = {user_id}
-          AND rl.login_successful = true
-        ORDER BY kl.created_at DESC
-        LIMIT 100;
-        """
-
-        df_logs = pd.read_sql_query(query, db.bind)
-
-        if not df_logs.empty:
-
-            processed_dataset = []
-
-            for raw_data in df_logs["keystroke_timing"]:
-
-                try:
-                    if isinstance(raw_data, str):
-                        data = json.loads(raw_data)
-                    else:
-                        data = raw_data
-
-                    if not isinstance(data, list):
-                        continue
-
-                    if len(data) < incoming_len:
-                        data.extend([0] * (incoming_len - len(data)))
-
-                    processed_dataset.append(data[:incoming_len])
-
-                except Exception:
-                    continue
-
-            if processed_dataset:
-                print(
-                    f"DEBUG: user {user_id} "
-                    f"최근 로그인 키스트로크 {len(processed_dataset)}건 사용"
-                )
-
-                return np.array(processed_dataset)
-
-    except Exception as e:
-        print(f"DEBUG: keystroke_logs 조회 실패 {e}")
+    processed_dataset = []
 
     # ==================================================
-    # 2차: 회원가입 15회 프로필
+    # 1차: 회원가입 프로필(기본 15회)
     # ==================================================
     try:
         query = f"""
@@ -80,8 +31,6 @@ def fetch_past_keystrokes_from_db(
 
             raw_string = df_prof["raw_profile_data"].iloc[0]
             profiles_dict = json.loads(raw_string)
-
-            processed_dataset = []
 
             for session in profiles_dict:
 
@@ -102,19 +51,71 @@ def fetch_past_keystrokes_from_db(
 
                 processed_dataset.append(data[:incoming_len])
 
-            if processed_dataset:
+    except Exception as e:
+        print(f"DEBUG: 회원가입 프로필 로드 실패 {e}")
 
-                print(
-                    f"DEBUG: user {user_id} "
-                    f"회원가입 프로필 {len(processed_dataset)}건 사용"
-                )
+    # ==================================================
+    # 2차: 로그인 성공 이력 추가
+    # ==================================================
+    try:
+        query = f"""
+        SELECT kl.keystroke_timing
+        FROM keystroke_logs kl
+        JOIN risk_logs rl
+            ON kl.risk_log_id = rl.id
+        WHERE rl.user_id = {user_id}
+          AND rl.login_successful = true
+        ORDER BY kl.created_at DESC
+        LIMIT 85;
+        """
 
-                return np.array(processed_dataset)
+        df_logs = pd.read_sql_query(query, db.bind)
+
+        for raw_data in df_logs["keystroke_timing"]:
+
+            try:
+                if isinstance(raw_data, str):
+                    data = json.loads(raw_data)
+                else:
+                    data = raw_data
+
+                if not isinstance(data, list):
+                    continue
+
+                # dict 형태 방어
+                data = [
+                    item.get("time", 0)
+                    if isinstance(item, dict)
+                    else item
+                    for item in data
+                ]
+
+                if len(data) < incoming_len:
+                    data.extend([0] * (incoming_len - len(data)))
+
+                processed_dataset.append(data[:incoming_len])
+
+            except Exception:
+                continue
 
     except Exception as e:
-        print(f"DEBUG: 프로필 파싱 에러 {e}")
+        print(f"DEBUG: 로그인 이력 로드 실패 {e}")
+
+    # ==================================================
+    # 최대 100개 유지
+    # ==================================================
+    if processed_dataset:
+
+        if len(processed_dataset) > 100:
+            processed_dataset = processed_dataset[:15] + processed_dataset[-85:]
+
+        print(
+            f"DEBUG: user {user_id} "
+            f"학습 데이터 {len(processed_dataset)}건 사용"
+        )
+
+        return np.array(processed_dataset)
 
     raise ValueError(
         f"user_id={user_id} 의 키스트로크 학습 데이터를 찾을 수 없습니다."
     )
-    
