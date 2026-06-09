@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class KeystrokeEvent(BaseModel):
     key: str
@@ -9,4 +9,19 @@ class KeystrokeEvent(BaseModel):
 class UserRegisterWithKeystrokeDTO(BaseModel):
     username: str
     password: str
-    keystroke_profiles: List[List[KeystrokeEvent]] # 👈 객체 배열 구조로 통일
+
+    language: str
+    resolution: str
+    rtt: int
+
+    ip_address: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+    asn: Optional[str] = None
+    user_agent_string: Optional[str] = None
+    browser_name_version: Optional[str] = None
+    os_name_version: Optional[str] = None
+    device_type: Optional[str] = None
+
+    keystroke_profiles: List[List[KeystrokeEvent]]

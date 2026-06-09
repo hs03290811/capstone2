@@ -16,7 +16,16 @@ from app.api.schemas import UserRegisterWithKeystrokeDTO
 
 from app.core.database import get_db
 # DB 모델 임포트
-from app.models.models import User, RiskLog, UserSession, KeystrokeLog, UserKeystrokeProfile
+
+from app.models.models import (
+    User,
+    RiskLog,
+    UserSession,
+    KeystrokeLog,
+    UserKeystrokeProfile,
+    RBAReadyToTrain
+)
+
 from app.core.security import (
     get_password_hash, 
     verify_password, 
@@ -48,6 +57,55 @@ class LoginRequest(BaseModel):
 redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+def convert_to_feature_vector(events):
+
+    ignore_keys = {
+        "Backspace",
+        "Shift",
+        "Control",
+        "Alt",
+        "Meta",
+        "CapsLock",
+        "Tab"
+    }
+
+    filtered = [
+        e for e in events
+        if e.key not in ignore_keys
+    ]
+
+    keydown_times = []
+    keyup_times = []
+
+    for e in filtered:
+
+        if e.event.lower() in ["keydown", "down"]:
+            keydown_times.append(e.time)
+
+        elif e.event.lower() in ["keyup", "up"]:
+            keyup_times.append(e.time)
+
+    pair_count = min(len(keydown_times), len(keyup_times))
+
+    # H (Hold Time)
+    holds = [
+        keyup_times[i] - keydown_times[i]
+        for i in range(pair_count)
+    ]
+
+    # DD (Down-Down)
+    dd = [
+        keydown_times[i + 1] - keydown_times[i]
+        for i in range(len(keydown_times) - 1)
+    ]
+
+    # UD (Up-Down)
+    ud = [
+        keydown_times[i + 1] - keyup_times[i]
+        for i in range(pair_count - 1)
+    ]
+
+    return holds + dd + ud
 
 # ========================================================
 # 🛠️ 키스트로크 15회 연동형 회원가입 API
@@ -69,14 +127,40 @@ def signup(
     db.commit()
     db.refresh(new_user)
     
-    profiles_dict = [[event.dict() for event in sublist] for sublist in payload.keystroke_profiles]
-    keystroke_profile_string = json.dumps(profiles_dict)
+    for session in payload.keystroke_profiles:
+
+        feature_vector = convert_to_feature_vector(session)
+
+        db_profile = UserKeystrokeProfile(
+            user_id=new_user.id,
+            raw_profile_data=json.dumps(feature_vector)
+        )
+
+        db.add(db_profile)
+
+    db.flush()
     
-    db_profile = UserKeystrokeProfile(
+    db.commit()
+
+    new_rba = RBAReadyToTrain(
+        login_timestamp=int(datetime.now().timestamp()),
         user_id=new_user.id,
-        raw_profile_data=keystroke_profile_string
+        rtt=float(payload.rtt),
+        ip_address=payload.ip_address,
+        country=payload.country,
+        region=payload.region,
+        city=payload.city,
+        asn=payload.asn,
+        user_agent_string=payload.user_agent_string,
+        browser_name_version=payload.browser_name_version,
+        os_name_version=payload.os_name_version,
+        device_type=payload.device_type,
+        login_successful=True,
+        resolution=payload.resolution,
+        language=payload.language
     )
-    db.add(db_profile)
+
+    db.add(new_rba)
     db.commit()
     
     return {
@@ -193,6 +277,7 @@ async def login(
         user.last_device = f"{os_info} / {browser_info}"
         
         db.commit()
+        
 
         if login_status in ["ALLOWED", "KICKED_OUT"]:
             cache_payload = {
