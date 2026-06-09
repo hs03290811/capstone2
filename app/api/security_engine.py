@@ -286,6 +286,25 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
         # 이 전까지 수정 금지
         # =====================================================================================================
 
+        # =====================================================
+        # 디버그용
+        # =====================================================
+        print("========== RBA INPUT ==========")
+        print(f"LOGIN USER : {user_id}")
+        print(f"country    : {incoming_context['country']}")
+        print(f"region     : {incoming_context['region']}")
+        print(f"city       : {incoming_context['city']}")
+        print(f"asn        : {incoming_context['asn']}")
+        print(f"browser    : {incoming_context['browser_name_version']}")
+        print(f"os         : {incoming_context['os_name_version']}")
+        print(f"device     : {incoming_context['device_type']}")
+        print(f"resolution : {incoming_context['resolution']}")
+        print(f"language   : {incoming_context['language']}")
+        print(f"rtt        : {incoming_context['rtt']}")
+        print("===============================")
+
+
+
         # RBA 계산 (참고 코드를 기반으로 랜덤 포레스트 모델 머신러닝 연산 구현)
         df_rba = fetch_past_rba_profile_from_db(user_id, db)
 
@@ -354,6 +373,14 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 # 이진 분류를 위한 타겟 라벨링 기법 적용: 현재 타겟 사용자는 1(정상), 타 사용자는 0(공격자군)
                 df_ml['Target'] = (df_ml['user_id'] == user_id).astype(int)
 
+                print("========== TARGET DISTRIBUTION ==========")
+                print(df_ml['Target'].value_counts())
+                print("=========================================")
+
+                print("========== USER COUNTS ==========")
+                print(df_ml['user_id'].value_counts())
+                print("=================================")
+
                 # 분석에서 제외할 고유 식별 필드 및 타겟 드롭
                 drop_columns = ['user_id', 'Target', 'login_timestamp', 'ip_address','region','login_successful']
                 X_all = df_ml.drop(columns=drop_columns, errors='ignore')
@@ -372,6 +399,9 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 rf = RandomForestClassifier(n_estimators=100, random_state=42)
                 rf.fit(X_train, y_train)
 
+                print("========== CURRENT ROW ==========")
+                print(current_row.T)
+                print("=================================")
                 # 클래스별 예측 확률값 연산 추출 (proba_results -> [[공격자일 확률, 정상 사용자일 확률]])
                 proba_results = rf.predict_proba(X_test)
 

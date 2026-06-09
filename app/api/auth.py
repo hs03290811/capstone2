@@ -225,8 +225,7 @@ async def login(
     login_status = security_result["status"]
     ai_score = security_result["ai_score"]
 
-    if login_status == "DENIED":
-        raise HTTPException(status_code=403, detail=security_result["message"])
+    
 
     existing_sid = redis_client.get(f"user_sid:{username}")
     is_kicked = False
@@ -338,6 +337,15 @@ async def login(
     }
 
     if login_status == "MFA_REQUIRED":
+        return {
+            "access_token": None,
+            "token_type": "bearer",
+            "message": security_result["message"],
+            "security_analysis": security_analysis_payload,
+            "telemetry": telemetry_data
+        }
+
+    if login_status == "DENIED":
         return {
             "access_token": None,
             "token_type": "bearer",
