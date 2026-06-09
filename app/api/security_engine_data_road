@@ -119,3 +119,73 @@ def fetch_past_keystrokes_from_db(
     raise ValueError(
         f"user_id={user_id} 의 키스트로크 학습 데이터를 찾을 수 없습니다."
     )
+
+
+def fetch_past_rba_profile_from_db(
+    user_id: int,
+    db: Session
+) -> dict:
+    """
+    최근 성공 로그인 최대 300개 기반
+    사용자 RBA 프로필 생성
+    """
+
+    try:
+
+        query = f"""
+        SELECT
+            country,
+            region,
+            city,
+            asn,
+            browser_name_version,
+            os_name_version,
+            device_type,
+            resolution,
+            language,
+            rtt
+        FROM rba_ready_to_train
+        WHERE user_id = {user_id}
+          AND login_successful = true
+        ORDER BY id DESC
+        LIMIT 300;
+        """
+
+        df_rba = pd.read_sql_query(query, db.bind)
+
+        if not df_rba.empty:
+
+            return {
+                "countries": df_rba["country"].dropna().unique().tolist(),
+                "regions": df_rba["region"].dropna().unique().tolist(),
+                "cities": df_rba["city"].dropna().unique().tolist(),
+                "asns": df_rba["asn"].dropna().unique().tolist(),
+                "browsers": df_rba["browser_name_version"].dropna().unique().tolist(),
+                "os_list": df_rba["os_name_version"].dropna().unique().tolist(),
+                "devices": df_rba["device_type"].dropna().unique().tolist(),
+                "resolutions": df_rba["resolution"].dropna().unique().tolist(),
+                "languages": df_rba["language"].dropna().unique().tolist(),
+                "avg_rtt": (
+                    float(df_rba["rtt"].mean())
+                    if not df_rba["rtt"].dropna().empty
+                    else 45.0
+                )
+            }
+
+    except Exception as e:
+        print(f"DEBUG: RBA 프로필 로드 실패 {e}")
+
+    return {
+        "countries": [],
+        "regions": [],
+        "cities": [],
+        "asns": [],
+        "browsers": [],
+        "os_list": [],
+        "devices": [],
+        "resolutions": [],
+        "languages": [],
+        "avg_rtt": 45.0
+    }
+
+    
