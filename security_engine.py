@@ -307,7 +307,7 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
         # Top 4의 중요한 판단 속성을 상시 저장해두기 위한 리스트 변수 초기화
         top_4_features = []
 
-        if target_user_cnt == 0:
+        if target_user_cnt == 1:
             # [조건 반영] 데이터 개수가 0개라면 RBA 무조건 실패 처리 (확률 0.0 -> 고위험군 유도)
             rba_prob = 0.0
             print(f"DEBUG: user_id={user_id} - RBA 데이터가 0건이므로 무조건 실패 처리합니다.")
@@ -355,10 +355,6 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
 
                 # [추가] 수치형 데이터 결측치 방어 코드: 타인 데이터에 rtt 결측치(Null)가 섞여 있어도 정상 작동하게 만듭니다.
                 df_ml['rtt'] = pd.to_numeric(df_ml['rtt']).fillna(45.0)
-
-                # Feature Engineering: 에폭 형태인 'login_timestamp'를 변환하여 'Hour(시간)' 속성 추출
-                df_ml['Hour'] = pd.to_datetime(df_ml['login_timestamp'], unit='s', errors='coerce').dt.hour.fillna(
-                    0).astype(int)
 
                 # 범주형 데이터 전처리: 라벨 인코딩 일괄 수행
                 cat_cols = ['country', 'region', 'city', 'asn', 'device_type', 'os_name_version',
