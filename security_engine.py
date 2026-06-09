@@ -168,6 +168,62 @@ def fetch_past_keystrokes_from_db(
         f"user_id={user_id} 의 키스트로크 학습 데이터를 찾을 수 없습니다."
     )
 
+def fetch_past_rba_profile_from_db(
+    user_id: int,
+    db: Session
+) -> pd.DataFrame:
+    """
+    랜덤 포레스트 RBA 모델 학습을 위한 데이터셋 로드
+    - 본인 데이터(정상군)와 타인 데이터(대조군)를 함께 행(Row) 단위 데이터프레임으로 반환합니다.
+    """
+    try:
+        # verify_security_payload에서 모델 학습 및 전처리에 사용하는 모든 컬럼을 명시적으로 선택합니다.
+        # 총 300개의 데이터셋을 맞추기 위해 본인 데이터 150개, 타인 데이터 150개로 구성합니다.
+        query = f"""
+        (
+            SELECT 
+                user_id, login_timestamp, rtt, ip_address, country, region, city, 
+                asn, user_agent_string, browser_name_version, os_name_version, 
+                device_type, login_successful, resolution, language
+            FROM rba_ready_to_train
+            WHERE user_id = {user_id}
+              AND login_successful = true
+            ORDER BY id DESC
+            LIMIT 150
+        )
+        UNION ALL
+        (
+            SELECT 
+                user_id, login_timestamp, rtt, ip_address, country, region, city, 
+                asn, user_agent_string, browser_name_version, os_name_version, 
+                device_type, login_successful, resolution, language
+            FROM (
+                SELECT *,
+                    -- 다른 유저별(PARTITION BY user_id)로 그룹을 묶어 최신순으로 번호를 매깁니다.
+                    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) as rn
+                FROM rba_ready_to_train
+                WHERE user_id != {user_id}
+            ) sub
+            -- 다른 유저별로 가장 최근에 로그인한 N개씩만 필터링 (예: 10개씩)
+            WHERE sub.rn <= 30 
+            -- 그렇게 모은 타인 데이터 전체 중 최종적으로 150개만 랜덤하게 혹은 최신순으로 커트
+            LIMIT 150
+        );
+        """
+
+        df_rba = pd.read_sql_query(query, db.bind)
+        return df_rba
+
+    except Exception as e:
+        print(f"DEBUG: RBA 데이터셋 로드 실패 {e}")
+
+    # 예외 발생 시 하단의 verify_security_payload 가 터지지 않도록 기본 컬럼 구조를 가진 빈 데이터프레임 반환
+    return pd.DataFrame(columns=[
+        'user_id', 'login_timestamp', 'rtt', 'ip_address', 'country', 'region', 'city',
+        'asn', 'user_agent_string', 'browser_name_version', 'os_name_version',
+        'device_type', 'login_successful', 'resolution', 'language'
+    ])
+
 
 def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=3):
     try:
@@ -228,10 +284,7 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                     dynamic_threshold = mu + (float(k) * sigma if sigma > 0 else 1.0)
 
                     # 8. 테스트 데이터(현재 입력) 거리 계산 (피처 개수로 정규화)
-                    current_distances = cdist(X_test_key_scaled, mean_vector,
-                                              metric='cityblock').flatten() / num_features
-                    current_distances = cdist(X_test_key_scaled, mean_vector,
-                                              metric='cityblock').flatten() / num_features
+                    current_distances = cdist(X_test_key_scaled, mean_vector,metric='cityblock').flatten() / num_features
                     current_key_dist = float(current_distances[0])
 
                     # 9. 최종 임계값 판별 및 변수 업데이트 (임계값 이하면 성공)
@@ -245,19 +298,8 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
         # 이 전까지 수정 금지
         # =====================================================================================================
 
-        # 5. RBA 계산 (참고 코드를 기반으로 랜덤 포레스트 모델 머신러닝 연산 구현)
-
-        # [주석 처리] 백엔드 연동 영역: RBAReadyToTrain 테이블에서 유저별 최대 300개의 데이터셋 로드 필요
-        # 예시 기틀:
-        # query = f"SELECT * FROM rba_ready_to_train WHERE user_id = {user_id} OR ... LIMIT 300"
-        # df_rba = pd.read_sql_query(query, db.bind)
-
-        # 백엔드 연동 전까지 정상적인 빌드 및 방어 코드가 작동할 수 있도록 임시 빈 데이터프레임 구조 선언
-        df_rba = pd.DataFrame(columns=[
-            'user_id', 'login_timestamp', 'rtt', 'ip_address', 'country', 'region', 'city',
-            'asn', 'user_agent_string', 'browser_name_version', 'os_name_version',
-            'device_type', 'login_successful', 'resolution', 'language'
-        ])
+        # RBA 계산 (참고 코드를 기반으로 랜덤 포레스트 모델 머신러닝 연산 구현)
+        df_rba = fetch_past_rba_profile_from_db(user_id, db)
 
         # 현재 로그인 시도를 요청한 타겟 사용자의 기존 RBA 학습 데이터 건수 확인
         target_user_cnt = len(df_rba[df_rba['user_id'] == user_id])
@@ -275,10 +317,10 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
             print(f"DEBUG: user_id={user_id} - RBA 데이터가 10건 이하({target_user_cnt}건)이므로 애매 단계로 처리합니다.")
         else:
             try:
-                # [수정 부분] 요청하신 10가지 특정 핵심 보안 속성만 엄격하게 누락 여부 검사
+                # 11가지 특정 핵심 보안 속성만 엄격하게 누락 여부 검사
                 required_fields = [
-                    "country", "region", "city", "asn", "browser_name_version",
-                    "os_name_version", "device_type", "resolution", "language", "rtt"
+                    "country", "city", "asn", "browser_name_version",
+                    "os_name_version", "device_type", "resolution", "language", "rtt", "login_timestamp"
                 ]
 
                 # 지정된 핵심 속성 중 하나라도 값이 없거나 빈 문자열("")이면 예외 발생 -> RBA 실패 처리
@@ -311,6 +353,9 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 # 일관성 있는 라벨 인코딩을 위해 과거 데이터셋 맨 끝에 현재 시도 데이터를 일시 병합
                 df_ml = pd.concat([df_rba, current_row], ignore_index=True)
 
+                # [추가] 수치형 데이터 결측치 방어 코드: 타인 데이터에 rtt 결측치(Null)가 섞여 있어도 정상 작동하게 만듭니다.
+                df_ml['rtt'] = pd.to_numeric(df_ml['rtt']).fillna(45.0)
+
                 # Feature Engineering: 에폭 형태인 'login_timestamp'를 변환하여 'Hour(시간)' 속성 추출
                 df_ml['Hour'] = pd.to_datetime(df_ml['login_timestamp'], unit='s', errors='coerce').dt.hour.fillna(
                     0).astype(int)
@@ -334,6 +379,10 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 X_train = X_all.iloc[:-1]
                 y_train = y_all.iloc[:-1]
                 X_test = X_all.iloc[-1:]
+
+                # 이진 분류 무결성 검증: 초기 시스템 빌드 단계에서 만에 하나 대조군(0) 데이터가 아예 없으면 RF 피팅 오류가 나므로 예외 처리 유도
+                if len(np.unique(y_train)) < 2:
+                    raise ValueError("정상 데이터(1)와 대조군 데이터(0)가 모두 준비되어야 랜덤 포레스트 연산이 가능합니다.")
 
                 # 랜덤 포레스트 모델 빌드 및 지도 학습 실행
                 rf = RandomForestClassifier(n_estimators=100, random_state=42)
