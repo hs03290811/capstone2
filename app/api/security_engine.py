@@ -404,7 +404,7 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                     raise ValueError("정상 데이터(1)와 대조군 데이터(0)가 모두 준비되어야 랜덤 포레스트 연산이 가능합니다.")
 
                 # 랜덤 포레스트 모델 빌드 및 지도 학습 실행
-                rf = RandomForestClassifier(n_estimators=100, random_state=42)
+                rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight="balanced")
                 rf.fit(X_train, y_train)
 
                 print("========== CURRENT ROW ==========")

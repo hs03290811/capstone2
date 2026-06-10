@@ -142,25 +142,27 @@ def signup(
     
     db.commit()
 
-    new_rba = RBAReadyToTrain(
-        login_timestamp=int(datetime.now().timestamp()),
-        user_id=new_user.id,
-        rtt=float(payload.rtt),
-        ip_address=payload.ip_address,
-        country=payload.country,
-        region=payload.region,
-        city=payload.city,
-        asn=payload.asn,
-        user_agent_string=payload.user_agent_string,
-        browser_name_version=payload.browser_name_version,
-        os_name_version=payload.os_name_version,
-        device_type=payload.device_type,
-        login_successful=True,
-        resolution=payload.resolution,
-        language=payload.language
-    )
+    for _ in payload.keystroke_profiles:
+        new_rba = RBAReadyToTrain(
+            login_timestamp=int(datetime.now().timestamp()),
+            user_id=new_user.id,
+            rtt=float(payload.rtt),
+            ip_address=payload.ip_address,
+            country=payload.country,
+            region=payload.region,
+            city=payload.city,
+            asn=payload.asn,
+            user_agent_string=payload.user_agent_string,
+            browser_name_version=payload.browser_name_version,
+            os_name_version=payload.os_name_version,
+            device_type=payload.device_type,
+            login_successful=True,
+            resolution=payload.resolution,
+            language=payload.language
+        )
 
-    db.add(new_rba)
+        db.add(new_rba)
+
     db.commit()
     
     return {
