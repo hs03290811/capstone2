@@ -1,6 +1,6 @@
-let keyEvents = []; // 타이핑 이벤트(keydown, keyup)를 순서대로 담을 배열
+let keyEvents = []; // 타이핑 이벤트(keydown, keyup)를 담을 배열
 let timerInterval;
-let keystrokeChart = null; // Chart.js 인스턴스를 담을 전역 변수
+let keystrokeChart = null; // Chart.js 인스턴스 전역 변수
 
 // [로드맵 Phase 2] RTT 측정을 위한 초기 로드 시간 계산
 let estimatedRTT = 0;
@@ -11,95 +11,117 @@ window.addEventListener('load', () => {
     }
 });
 
-// HTML 요소가 로드된 후 이벤트 리스너 등록을 위해 사용
 window.addEventListener('DOMContentLoaded', () => {
     const passwordInput = document.getElementById('password');
     if (!passwordInput) return;
 
+    passwordInput.addEventListener('focus', () => {
+        keyEvents = [];
+    });
+
     passwordInput.addEventListener('keydown', (e) => {
-        if (e.repeat) return; // 꾹 누르고 있어서 발생하는 연속 이벤트 방지
-        if (e.key.length > 1 && e.key !== 'Backspace') return; // 특수 제어키 제외
+        if (e.repeat) return;
 
-        // 💡 백스페이스 입력 시 직전 글자의 타이밍 기록을 타임라인에서 안전하게 Undo 제거
-        if (e.key === 'Backspace') {
-            if (keyEvents.length > 0) {
-                let targetKey = null;
-                for (let i = keyEvents.length - 1; i >= 0; i--) {
-                    if (keyEvents[i].type === 'keydown') { targetKey = keyEvents[i].key; break; }
-                }
-                if (targetKey) {
-                    while (keyEvents.length > 0) {
-                        let popped = keyEvents.pop();
-                        if (popped.key === targetKey && popped.type === 'keydown') break;
-                    }
-                }
-            }
-            return; 
-        }
-        keyEvents.push({ key: e.key, type: 'keydown', time: performance.now() });
-    });
-
-    passwordInput.addEventListener('keyup', (e) => {
-        if (e.key.length > 1) return; // 특수 제어키 제외
-        keyEvents.push({ key: e.key, type: 'keyup', time: performance.now() });
-    });
-});
-
-// 로그인 및 CMU 규격 데이터 전송 함수
-async function login() {
-    try {
-        const passwordInput = document.getElementById('password');
-        const username = document.getElementById('username').value.trim();
-        const password = passwordInput ? passwordInput.value : '';
-
-        if (!username || !password) {
-            alert("아이디와 비밀번호를 모두 입력해 주세요.");
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            login();
             return;
         }
 
-        const keys = [];
-        const downMap = {};
-        for (let ev of keyEvents) {
-            if (ev.type === 'keydown') downMap[ev.key] = ev.time;
-            else if (ev.type === 'keyup' && downMap[ev.key] !== undefined) {
-                keys.push({ key: ev.key, down: downMap[ev.key], up: ev.time });
-                delete downMap[ev.key];
-            }
+        if (e.key.length > 1 && e.key !== 'Backspace') return;
+
+        if (e.key === 'Backspace') {
+            keyEvents = [];
+            return;
         }
 
-        const combinedKeystroke = [];
-        for (let i = 0; i < keys.length; i++) {
-            combinedKeystroke.push(Math.round(keys[i].up - keys[i].down));
-            if (i < keys.length - 1) {
-                combinedKeystroke.push(Math.round(keys[i+1].down - keys[i].down));
-                combinedKeystroke.push(Math.round(keys[i+1].down - keys[i].up));
+        keyEvents.push({
+            key: e.key,
+            type: 'keydown',
+            time: performance.now()
+        });
+    });
+
+    passwordInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') return;
+        if (e.key.length > 1) return;
+
+        keyEvents.push({
+            key: e.key,
+            type: 'keyup',
+            time: performance.now()
+        });
+    });
+});
+
+async function login() {
+    const passwordInput = document.getElementById('password');
+    const username = document.getElementById('username').value.trim();
+    const password = passwordInput ? passwordInput.value : '';
+
+    if (!username || !password) {
+        alert("아이디와 비밀번호를 모두 입력해 주세요.");
+        return;
+    }
+
+    // 1차 정제: keyEvents 로그 기반 글자별 누른/뗀 시간 추출
+    const keys = [];
+    const downMap = {};
+
+    for (let ev of keyEvents) {
+        if (ev.type === 'keydown') {
+            if (!downMap[ev.key]) downMap[ev.key] = [];
+            downMap[ev.key].push(ev.time);
+        } else if (ev.type === 'keyup') {
+            if (downMap[ev.key] && downMap[ev.key].length > 0) {
+                const downTime = downMap[ev.key].shift();
+                keys.push({
+                    key: ev.key,
+                    down: downTime,
+                    up: ev.time
+                });
             }
         }
+    }
 
-        const securityPayload = {
-            "username": username,
-            "password": password,
-            "language": navigator.language || "ko-KR",
-            "resolution": `${window.screen.width}x${window.screen.height}`,
-            "rtt": estimatedRTT || 0, 
-            "keystroke": combinedKeystroke,
-            
-            // 🌐 백엔드 auth.py 완벽 대응용 9대 시연 환경 메타 인자 세팅
-            "ip_address": "219.255.207.24",
-            "country": "South Korea",
-            "region": "Seoul",
-            "city": "Seoul",
-            "asn": "AS9318 (SK Broadband)",
-            "user_agent_string": navigator.userAgent,
-            "browser_name_version": "Chrome 120.0.0.0",
-            "os_name_version": "Mac OS X 10.15.7",
-            "device_type": "Desktop"
-        };
+    keys.sort((a, b) => a.down - b.down);
 
-        console.log("🚀 백엔드 전송 규격 데이터 패킷:", securityPayload);
+    // CMU 규격 1차원 정수 배열 조립
+    const combinedKeystroke = [];
+    for (let i = 0; i < keys.length; i++) {
+        const h = Math.round(keys[i].up - keys[i].down);
+        combinedKeystroke.push(h);
 
-        const url = 'http://32.197.121.164:8001/auth/login';
-        const response = await fetch(url, {
+        if (i < keys.length - 1) {
+            const dd = Math.round(keys[i + 1].down - keys[i].down);
+            const ud = Math.round(keys[i + 1].down - keys[i].up);
+            combinedKeystroke.push(dd);
+            combinedKeystroke.push(ud);
+        }
+    }
+
+    const securityPayload = {
+        "username": username,
+        "password": password,
+        "language": navigator.language || "ko-KR",
+        "resolution": `${window.screen.width}x${window.screen.height}`,
+        "rtt": estimatedRTT || 0,
+        "keystroke": combinedKeystroke,
+        "ip_address": "219.255.207.24",
+        "country": "South Korea",
+        "region": "Seoul",
+        "city": "Seoul",
+        "asn": "AS9318 (SK Broadband)",
+        "user_agent_string": navigator.userAgent,
+        "browser_name_version": "Chrome 120.0.0.0",
+        "os_name_version": "Mac OS X 10.15.7",
+        "device_type": "Desktop"
+    };
+
+    console.log("🚀 백엔드 전송 규격 데이터 패킷:", securityPayload);
+
+    try {
+        const response = await fetch('http://32.197.121.164:8001/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(securityPayload)
@@ -108,24 +130,19 @@ async function login() {
         const result = await response.json();
         console.log("📥 서버 응답 결과:", result);
 
-        // 💡 [정품 복구 1] 백엔드가 이제 에러 없이 정답 벡터를 밀어주므로, 실시간 가입 데이터 매싱 가동!
-        const meanVector = result.telemetry?.keystroke?.mean_vector || [110, 240, 130, 310, 95, 280, 120, 340, 115, 290, 85, 300];
+        // 백엔드가 주는 평균 정답선 벡터 낚아채기
+        const meanVector = result.telemetry?.keystroke?.mean_vector || [110, 240, 130, 310, 95, 280, 120, 340, 115, 290];
         drawKeystrokeChart(combinedKeystroke, meanVector);
 
-        // 💡 [정품 복구 2] 가짜 오타 무력화 가드를 걷어내고, 백엔드가 주는 실제 수치 주소를 완벽 매싱 조준합니다.
         const finalStatus = result.security_analysis?.status || result.status;
 
-        // 🟢 Case A: 백엔드가 완전히 통과(ALLOWED / ALLOW / KICKED_OUT) 승인을 내렸을 때
         if (response.ok && (finalStatus === "ALLOWED" || finalStatus === "ALLOW" || finalStatus === "KICKED_OUT")) {
             alert("🎉 로그인 성공! 환영합니다.");
             const mfaBox = document.getElementById('mfa-section');
             if (mfaBox) mfaBox.style.display = 'none';
         } 
-        // 🟡 Case B: 비밀번호는 맞지만 타건 리듬이 불일치하여 2차 인증(MFA_REQUIRED) 단계로 걸렸을 때
         else if (response.ok && finalStatus === "MFA_REQUIRED") {
             const riskReason = result.security_analysis?.primary_risk_factor || "위협 감지";
-            
-            // telemetry 최하단 루트방에 숨겨져서 내려오는 진짜 리얼 타건 수치 바인딩
             const distance = result.telemetry?.keystroke?.current_distance ?? "N/A";
             const threshold = result.telemetry?.keystroke?.dynamic_threshold ?? "N/A";
 
@@ -136,29 +153,32 @@ async function login() {
                 `• 동적 임계치 (Threshold): ${threshold}\n` +
                 `---------------------------------`
             );
-            showMfaSection(username); 
+            showMfaSection(username);
         } 
-        // 🔴 Case C: 애초에 아이디/비번이 완전히 틀렸거나 백엔드 DB 저장 오류가 발생했을 때
         else {
             alert("❌ 로그인 실패: " + (result.detail || result.message || "아이디 또는 비밀번호가 일치하지 않습니다."));
         }
+
     } catch (error) {
         console.error("에러 발생:", error);
         alert("통신 중 오류가 발생했습니다.");
+        drawKeystrokeChart(combinedKeystroke, [110, 240, 130, 310, 95, 280, 120, 340, 115, 290]);
+    } finally {
+        keyEvents = [];
     }
 }
 
-// QR 및 타이머 로직
 function showMfaSection(username) {
     const mfaSection = document.getElementById('mfa-section');
     const qrImage = document.getElementById('qr-image');
     if (!mfaSection) return;
-    
+
     mfaSection.style.display = 'block';
-    const myIp = "172.20.10.14"; 
-    
+    const myIp = "172.20.10.14";
+    const authUrl = `http://${myIp}:5500/cap/mfa.html?user=${encodeURIComponent(username)}`;
+
     if (qrImage) {
-        qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`http://${myIp}:5500/cap/mfa.html?user=${username}`)}`;
+        qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(authUrl)}`;
     }
     console.log("🚀 QR 생성 완료!");
     startTimer();
@@ -169,7 +189,7 @@ function startTimer() {
     const timerDisplay = document.getElementById('timer');
     if (!timerDisplay) return;
     if (timerInterval) clearInterval(timerInterval);
-    
+
     timerInterval = setInterval(() => {
         const min = Math.floor(timeLeft / 60);
         const sec = timeLeft % 60;
@@ -179,35 +199,85 @@ function startTimer() {
     }, 1000);
 }
 
-// 📊 상시 글자+화살표 플러그인이 탑재된 명품 scatter 수평선 차트 렌더러
+// 📊 문자열 텍스트 라벨 플러그인을 완전히 제거한 최종 정제 차트 엔진
 function drawKeystrokeChart(currentData, targetVector) {
     const ctx = document.getElementById('keystrokeChart');
     if (!ctx) return;
+
     const currentPasswordValue = document.getElementById('password')?.value || '';
     const currentChars = currentPasswordValue.split('');
 
-    function parseCmuToAbsoluteTimes(cmuArray, charList) {
+    function parseCmuToAbsoluteTimes(cmuArray, charList, yValue) {
         const points = [];
         if (!cmuArray || cmuArray.length === 0 || charList.length === 0) return points;
+
         let currentPressTime = 0;
         for (let i = 0; i < charList.length; i++) {
             const cmuIdx = i * 3;
             if (cmuIdx >= cmuArray.length) break;
-            points.push({ x: currentPressTime, y: 1, keyLabel: charList[i], pointType: 'press' });
-            points.push({ x: currentPressTime + cmuArray[cmuIdx], y: 1, keyLabel: charList[i], pointType: 'release' });
-            if (cmuArray[cmuIdx + 1] !== undefined) currentPressTime += cmuArray[cmuIdx + 1];
-            else break;
+
+            const holdTime = cmuArray[cmuIdx];
+            const downDown = cmuArray[cmuIdx + 1];
+
+            points.push({
+                x: currentPressTime,
+                y: yValue,
+                pointType: 'press',
+                charIdx: i
+            });
+
+            points.push({
+                x: currentPressTime + holdTime,
+                y: yValue,
+                pointType: 'release',
+                charIdx: i
+            });
+
+            if (downDown !== undefined) {
+                currentPressTime += downDown;
+            } else {
+                break;
+            }
         }
         return points;
     }
 
-    const rawCurrentPoints = parseCmuToAbsoluteTimes(currentData, currentChars);
-    const rawRegPoints = parseCmuToAbsoluteTimes(targetVector, currentChars);
-    rawRegPoints.forEach(pt => { pt.y = 2; });
+    function normalizePoints(points) {
+        if (!points || points.length === 0) return [];
 
-    const maxTime = Math.max(...rawCurrentPoints.map(p => p.x), ...rawRegPoints.map(p => p.x), 1);
-    const datasetCurrent = rawCurrentPoints.map(pt => ({ x: parseFloat((pt.x / maxTime).toFixed(2)), y: pt.y, keyLabel: pt.keyLabel, pointType: pt.pointType }));
-    const datasetReg = rawRegPoints.map(pt => ({ x: parseFloat((pt.x / maxTime).toFixed(2)), y: pt.y, keyLabel: pt.keyLabel, pointType: pt.pointType }));
+        const timeValues = points.map(pt => pt.x);
+        const minX = Math.min(...timeValues);
+        const maxX = Math.max(...timeValues);
+        const range = maxX - minX || 1;
+
+        const sorted = [...points].sort((a, b) => {
+            if (a.charIdx !== b.charIdx) {
+                return a.charIdx - b.charIdx;
+            }
+            return a.pointType === 'press' ? -1 : 1;
+        });
+
+        return sorted.map(pt => ({
+            x: parseFloat(((pt.x - minX) / range).toFixed(2)),
+            y: pt.y,
+            pointType: pt.pointType
+        }));
+    }
+
+    const rawCurrentPoints = parseCmuToAbsoluteTimes(currentData, currentChars, 1);
+
+    let regChars = currentChars;
+    if (targetVector && targetVector.length > 0) {
+        const regCharCount = Math.floor((targetVector.length + 1) / 3);
+        if (regCharCount !== currentChars.length) {
+            regChars = Array.from({ length: regCharCount }, (_, i) => String(i + 1));
+        }
+    }
+
+    const rawRegPoints = parseCmuToAbsoluteTimes(targetVector, regChars, 2);
+
+    const datasetCurrent = normalizePoints(rawCurrentPoints);
+    const datasetReg = normalizePoints(rawRegPoints);
 
     if (keystrokeChart) {
         keystrokeChart.data.datasets[0].data = datasetReg;
@@ -216,6 +286,7 @@ function drawKeystrokeChart(currentData, targetVector) {
         return;
     }
 
+    // 💡 문자열 텍스트 라벨 플러그인(textLabelsPlugin) 전면 삭제 완료
     keystrokeChart = new Chart(ctx, {
         type: 'scatter',
         data: {
@@ -226,25 +297,12 @@ function drawKeystrokeChart(currentData, targetVector) {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            layout: { padding: { top: 20, bottom: 10, left: 15, right: 15 } },
+            layout: { padding: { top: 15, bottom: 10, left: 15, right: 15 } },
             plugins: { legend: { display: false } },
             scales: {
-                x: { min: 0.0, max: 1.0, title: { display: true, text: 'Time Rate (0.0 ~ 1.0)' } },
-                y: { min: 0.2, max: 2.8, ticks: { stepSize: 1, callback: function(v) { if (v===1 || v===2) return v; } } }
+                x: { min: 0, max: 1, title: { display: true, text: 'Time Rate (0.0 ~ 1.0)' } },
+                y: { min: 0.2, max: 2.8, ticks: { stepSize: 1, callback: function (v) { if (v === 1 || v === 2) return v; } } }
             }
-        },
-        plugins: [{
-            id: 'textLabelsPlugin',
-            afterDatasetsDraw(chart) {
-                const { ctx } = chart; ctx.save(); ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#1e293b'; ctx.textAlign = 'center';
-                chart.data.datasets.forEach((dataset, idx) => {
-                    chart.getDatasetMeta(idx).data.forEach((point, i) => {
-                        const raw = dataset.data[i];
-                        if (raw && raw.keyLabel) ctx.fillText(`${raw.keyLabel}${raw.pointType === 'press' ? '↑' : '↓'}`, point.x, point.y - 12);
-                    });
-                });
-                ctx.restore();
-            }
-        }]
+        }
     });
 }
