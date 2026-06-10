@@ -138,24 +138,49 @@ async function login() {
 
         const finalStatus = result.security_analysis?.status || result.status;
 
+        // =========================================================================
+        // =========================================================================
+        
+        // 🔵 [FLOW 01 & 03]: 백엔드가 ALLOWED 승인을 내렸을 때 (로그인 성공)
         if (response.ok && (finalStatus === "ALLOWED" || finalStatus === "ALLOW" || finalStatus === "KICKED_OUT")) {
             alert("🎉 로그인 성공! 환영합니다.");
             const mfaBox = document.getElementById('mfa-section');
             if (mfaBox) mfaBox.style.display = 'none';
         } 
-        else if (finalStatus === "MFA_REQUIRED" || !response.ok) {
-            const riskReason = result.security_analysis?.primary_risk_factor || "KEYSTROKE_MISMATCH";
-            const distance = result.telemetry?.keystroke?.current_distance ?? "0.5842";
-            const threshold = result.telemetry?.keystroke?.dynamic_threshold ?? "0.5124";
+        // 🟣 [FLOW 01 & 02]: 타건 리듬 불일치 등으로 2차 인증(MFA_REQUIRED) 단계로 걸렸을 때
+        else if (response.ok && finalStatus === "MFA_REQUIRED") {
+            const riskReason = result.security_analysis?.primary_risk_factor || "위협 감지";
+            const distance = result.telemetry?.keystroke?.current_distance ?? "N/A";
+            const threshold = result.telemetry?.keystroke?.dynamic_threshold ?? "N/A";
 
             alert(
                 `🔒 보안 알림: [${riskReason}] 리스크로 인해 2차 인증을 가동합니다.\n` +
                 `---------------------------------\n` +
-                `• 타건 거리 (Distance): ${distance === -1 ? "0.6412" : distance}\n` +
-                `• 동적 임계치 (Threshold): ${threshold === -1 ? "0.5124" : threshold}\n` +
+                `• 타건 거리 (Distance): ${distance}\n` +
+                `• 동적 임계치 (Threshold): ${threshold}\n` +
                 `---------------------------------`
             );
-            showMfaSection(username);
+            showMfaSection(username); 
+        } 
+        // 🔴 [FLOW 04 핵심 패치]: AI 모델이 해커로 판단하여 원천 차단(DENIED) 처리를 내렸을 때!
+        else if (response.ok && finalStatus === "DENIED") {
+            const riskReason = result.security_analysis?.primary_risk_factor || "BOTH_RISK";
+            const rbaProb = result.security_analysis?.rba_match_probability ?? "0.0";
+
+            alert(
+                `🚨 [위험 감지]: 시스템 불법 접근이 감지되어 접속이 즉시 거부됩니다.\n` +
+                `---------------------------------\n` +
+                `• 차단 사유: ${riskReason} (타건 패스워드 리듬 및 환경 리스크 폭발)\n` +
+                `• 사용자 본인 확률: ${rbaProb}%\n` +
+                `---------------------------------\n` +
+                `보안 지침에 따라 차단 격리 페이지로 강제 이동합니다.`
+            );
+            // 🎬 윤서님 폴더 안에 있는 denied.html 페이지로 리얼하게 이동!
+            window.location.href = 'denied.html';
+        } 
+        // ❌ 일반 실패: 비번 문자열 자체가 아예 틀렸을 때 (400 Bad Request 등)
+        else {
+            alert("❌ 로그인 실패: " + (result.detail || "아이디 또는 비밀번호가 일치하지 않습니다."));
         }
 
     } catch (error) {
