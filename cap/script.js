@@ -222,6 +222,7 @@ function startTimer() {
     }, 1000);
 }
 
+// 📊 [X축 0.05 완전 고정]: 0.0, 0.05, 0.1, 0.15 눈금 글자 전체 노출 및 45도 회전 방지
 function drawKeystrokeChart(currentData, targetVector) {
     const ctx = document.getElementById('keystrokeChart');
     if (!ctx) return;
@@ -250,7 +251,6 @@ function drawKeystrokeChart(currentData, targetVector) {
         return points;
     }
 
-    // 인덱스 기반 시간 축 정밀 스케일링 펑션
     function normalizePoints(points) {
         if (!points || points.length === 0) return [];
 
@@ -271,7 +271,8 @@ function drawKeystrokeChart(currentData, targetVector) {
         }));
     }
 
-    const rawCurrentPoints = parseCmuToAbsoluteTimes(currentData, currentChars, 1);
+    // 아랫줄 (y = 1) = 현재 입력
+    const rawCurrentPoints = parseCmuToAbsoluteTimes(currentData, currentChars, 1); 
 
     let regChars = currentChars;
     if (targetVector && targetVector.length > 0) {
@@ -281,7 +282,8 @@ function drawKeystrokeChart(currentData, targetVector) {
         }
     }
 
-    const rawRegPoints = parseCmuToAbsoluteTimes(targetVector, regChars, 2);
+    // 윗줄 (y = 2) = 등록 평균
+    const rawRegPoints = parseCmuToAbsoluteTimes(targetVector, regChars, 2); 
 
     const datasetCurrent = normalizePoints(rawCurrentPoints);
     const datasetReg = normalizePoints(rawRegPoints);
@@ -297,17 +299,47 @@ function drawKeystrokeChart(currentData, targetVector) {
         type: 'scatter',
         data: {
             datasets: [
-                { label: '등록 평균선', data: datasetReg, borderColor: '#9b59b6', backgroundColor: '#9b59b6', showLine: true, borderWidth: 2, pointRadius: 6 },
-                { label: '현재 타건선', data: datasetCurrent, borderColor: '#3498db', backgroundColor: '#3498db', showLine: true, borderWidth: 2, pointRadius: 6 }
+                { label: '등록 평균선', data: datasetReg, borderColor: '#9b59b6', backgroundColor: '#9b59b6', showLine: true, borderWidth: 1.5, pointRadius: 4.5 },
+                { label: '현재 타건선', data: datasetCurrent, borderColor: '#3498db', backgroundColor: '#3498db', showLine: true, borderWidth: 1.5, pointRadius: 4.5 }
             ]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
-            layout: { padding: { top: 15, bottom: 10, left: 15, right: 15 } },
-            plugins: { legend: { display: false } },
+            responsive: true, 
+            maintainAspectRatio: false,
+            layout: { padding: { top: 15, bottom: 15, left: 30, right: 30 } },
+            plugins: { legend: { display: false } }, 
             scales: {
-                x: { min: 0, max: 1, title: { display: true, text: 'Time Rate (0.0 ~ 1.0)' } },
-                y: { min: 0.2, max: 2.8, ticks: { stepSize: 1, callback: function (v) { if (v === 1 || v === 2) return v; } } }
+                x: { 
+                    min: 0, 
+                    max: 1, 
+                    title: { display: true, text: 'Time Rate (0.0 ~ 1.0)' },
+                    ticks: {
+                        // 🎯 [X축 억까 청소 핵심 패치구역]
+                        stepSize: 0.05, // 0.05 단위로 눈금 생성 강제 고정
+                        maxRotation: 0, // 💥 글자가 대각선으로 돌아가는 버그 원천 차단
+                        minRotation: 0, // 무조건 수평(가로)으로 이쁘게 인쇄
+                        autoSkip: false, // 💥 Chart.js가 임의로 눈금 숫자를 생략하는 억까 방지
+                        callback: function(value) {
+                            // 소수점 스케일링 버그 방지용 (0.05, 0.10, 0.15 정밀 인쇄)
+                            return parseFloat(value.toFixed(2));
+                        }
+                    },
+                    grid: {
+                        stepSize: 0.05
+                    }
+                },
+                y: { 
+                    min: 0.2, 
+                    max: 2.8, 
+                    ticks: { 
+                        stepSize: 1, 
+                        callback: function (v) { 
+                            if (v === 1) return '현재 입력'; 
+                            if (v === 2) return '등록 평균'; 
+                            return '';
+                        } 
+                    } 
+                }
             }
         }
     });

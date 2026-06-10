@@ -8,9 +8,13 @@
 </head>
 <body style="position: relative; min-height: 100vh; margin: 0; background-color: #f5f7fa;">
 
-    <div id="chart-overlay-wrapper" style="position: fixed; top: 100px; right: 460px; width: 550px; height: 190px; background: rgba(255, 255, 255, 0.98); border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); padding: 15px; z-index: 100;">
-        <div style="font-size: 0.85em; font-weight: bold; color: #334155; margin-bottom: 8px; text-align: left; padding-left: 5px;">📊 실시간 키스트로크 타이밍 분석 (Rate)</div>
-        <canvas id="keystrokeChart"></canvas>
+    <div id="chart-overlay-wrapper" style="width: 100%; max-width: 850px; height: 230px; background: rgba(255, 255, 255, 0.98); border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); padding: 20px; margin: 0 auto 30px auto; box-sizing: border-box;">
+        <div style="font-size: 0.9em; font-weight: bold; color: #1e293b; margin-bottom: 12px; text-align: left; padding-left: 5px; display: flex; align-items: center; gap: 6px;">
+            <span>📊</span> 실시간 키스트로크 타이밍 분석 (Rate)
+        </div>
+        <div style="width: 100%; height: calc(100% - 30px); position: relative;">
+            <canvas id="keystrokeChart"></canvas>
+        </div>
     </div>
 
     <div class="login-container" style="max-width: 400px; margin: 100px auto; padding: 40px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center;">
