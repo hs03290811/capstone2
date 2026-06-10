@@ -403,6 +403,15 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 if len(np.unique(y_train)) < 2:
                     raise ValueError("정상 데이터(1)와 대조군 데이터(0)가 모두 준비되어야 랜덤 포레스트 연산이 가능합니다.")
 
+
+                print("========== DF_ML TAIL ==========")
+                print(df_ml.tail())
+                print("===============================")
+
+                print("========== TARGET DISTRIBUTION ==========")
+                print(df_ml["Target"].value_counts())
+                print("=========================================")
+
                 # 랜덤 포레스트 모델 빌드 및 지도 학습 실행
                 rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight="balanced")
                 rf.fit(X_train, y_train)
@@ -413,8 +422,14 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                 # 클래스별 예측 확률값 연산 추출 (proba_results -> [[공격자일 확률, 정상 사용자일 확률]])
                 proba_results = rf.predict_proba(X_test)
 
+                print("========== PREDICT PROBA ==========")
+                print(proba_results)
+                print("===================================")
+
                 # 정상 사용자(인덱스 1)에 매칭되는 확률을 가져와 하단 가이드에 맞춰 100배 스케일링 수행
                 rba_prob = float(proba_results[0][1] * 100.0)
+
+                print("RBA_PROB =", rba_prob)
 
                 # [요구사항 반영] 현재 코드에 기록을 유지하기 위한 Top 4 중요 속성(Feature Importance) 추출 및 변수 할당
                 importances = pd.Series(rf.feature_importances_, index=X_train.columns)

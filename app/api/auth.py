@@ -221,7 +221,7 @@ async def login(
         incoming_keystroke=payload.keystroke,
         incoming_context=incoming_context,
         db=db,
-        k=2.5
+        k=3
     )
     
     login_status = security_result["status"]
