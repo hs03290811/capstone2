@@ -219,7 +219,9 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
         keystroke_success = False
         current_key_dist = -1.0
         dynamic_threshold = -1.0
-
+        
+        reference_vector = []
+        top_4_features = []
         # =====================================================================================================
         # [수정 영역] 하드코딩 제거, 에러 처리 강화 및 맨해튼 거리 기반 동적 임계값 알고리즘 반영
         # =====================================================================================================
@@ -232,6 +234,12 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
             try:
                 # 2. DB로부터 과거 성공 이력 데이터(최대 100개) 로드
                 X_train_key = fetch_past_keystrokes_from_db(user_id, db, incoming_len=len(incoming_keystroke))
+                
+                reference_vector = (
+                    np.mean(X_train_key, axis=0)
+                    .round(2)
+                    .tolist()
+                )
 
                 # 3. [에러 처리] DB에 과거 데이터가 아예 존재하지 않는 경우 하드코딩 없이 실패(False) 처리
                 if X_train_key is None or len(X_train_key) == 0:
@@ -458,9 +466,12 @@ def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_con
                     "success": keystroke_success,
                     "current_distance": float(round(current_key_dist, 4)),
                     "dynamic_threshold": float(round(dynamic_threshold, 4)),
-                    "k_value": float(k)
+                    "k_value": float(k),
+                    "reference_vector": reference_vector,
+                    "current_vector": incoming_keystroke
+
                 },
-                "rba": {"risk_tier": rba_tier, "genuine_probability": f"{rba_prob:.1f}%"}
+                "rba": {"risk_tier": rba_tier, "genuine_probability": f"{rba_prob:.1f}%", "top_features": top_4_features}
             }
         }
     except Exception as e:
