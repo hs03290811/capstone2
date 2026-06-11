@@ -208,12 +208,13 @@ async def login(
         "region": detected_region,
         "city": detected_city,
         "asn": detected_asn,
+        "user_agent_string": payload.user_agent_string,
         "browser_name_version": browser_info,
         "os_name_version": os_info,
         "device_type": device_type,
         "resolution": payload.resolution,
         "language": payload.language,
-        "Hour": datetime.now().hour
+        "Hour": datetime.now().hou
     }
 
     security_result = verify_security_payload(
@@ -221,7 +222,7 @@ async def login(
         incoming_keystroke=payload.keystroke,
         incoming_context=incoming_context,
         db=db,
-        k=3
+        k=2.5
     )
     
     login_status = security_result["status"]

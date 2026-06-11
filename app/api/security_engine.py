@@ -213,7 +213,7 @@ def fetch_past_rba_profile_from_db(
     ])
 
 
-def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=3):
+def verify_security_payload(user_id: int, incoming_keystroke: list, incoming_context: dict, db: Session, k=2.5):
     try:
         # 데이터 부재 혹은 예외 발생 시 하단의 RBA 의사결정 및 Telemetry 딕셔너리가 정상 작동하도록 기본값 선언
         keystroke_success = False
