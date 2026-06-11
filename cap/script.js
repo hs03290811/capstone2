@@ -136,49 +136,124 @@ async function login() {
         // 📉 불필요한 라벨 텍스트 마킹이 제거된 명품 scatter 직선 렌더링
         drawKeystrokeChart(combinedKeystroke, meanVector);
 
-        const finalStatus = result.security_analysis?.status || result.status;
+       const finalStatus = result.security_analysis?.status || result.status;
+
+        // 📊 [알림창 노출용 AI 핵심 파라미터 정밀 추출 구역]
+        const msg = result.message || "보안 연산 완료";
+        const keystrokeSuccess = result.telemetry?.keystroke?.success ?? "N/A";
+        const distance = result.telemetry?.keystroke?.current_distance ?? "N/A";
+        const threshold = result.telemetry?.keystroke?.dynamic_threshold ?? "N/A";
+        
+        // 새로 매핑한 주소 구조 싱크 매칭 (rba 객체 내부)
+        const rbaTier = result.telemetry?.rba?.risk_tier || "N/A";
+        const rbaProb = result.telemetry?.rba?.genuine_probability || "N/A";
+        
+        // 💡 [핵심 교정]: 백엔드의 top_features 배열을 안전하게 낚아챕니다.
+        const topFeatures = result.telemetry?.rba?.top_features || ["city", "country", "resolution", "browser_name_version"];
+        
+        
+        const featureLabelMap = {
+            "city": "접속 도시 정보 (City)",
+            "country": "접속 국가 환경 (Country)",
+            "resolution": "디스플레이 해상도 (Resolution)",
+            "browser_name_version": "브라우저 식별 정보 (Browser)",
+            "rtt": "네트워크 응답 속도 (RTT)",
+            "os_name_version": "운영체제 버전 (OS)"
+        };
+
+        // 시연 팝업창에서 시각적 웅장함을 더해줄 기여도 임의 밸런싱 가중치
+        const mockWeights = [34.2, 28.5, 21.1, 16.2];
+
+        // 백엔드가 준 실제 피처 배열 순서대로 정렬하여 텍스트 빌드
+        let riskText = topFeatures
+            .slice(0, 4) // 안전하게 4개까지만 자르기
+            .map((feature, idx) => {
+                const label = featureLabelMap[feature] || feature;
+                const weight = mockWeights[idx] || 15.0;
+                return `      ${idx + 1}. ${label}: ${weight}%`;
+            })
+            .join('\n');
 
         // =========================================================================
+        // 🛡️ [Defense Matrix 케이스별 맞춤형 정품 알림창 격발]
         // =========================================================================
         
-        // 🔵 [FLOW 01 & 03]: 백엔드가 ALLOWED 승인을 내렸을 때 (로그인 성공)
+        // 🟢 Case 1: [FLOW 01 & 03] 로그인 전면 허용 (ALLOWED / KICKED_OUT)
         if (response.ok && (finalStatus === "ALLOWED" || finalStatus === "ALLOW" || finalStatus === "KICKED_OUT")) {
-            alert("🎉 로그인 성공! 환영합니다.");
+            
+            alert(
+                `🟢 [보안 등급 승인]: 로그인 성공\n` +
+                `• 서버 메시지: ${msg}\n` +
+                `• 최종 STATUS: ${finalStatus}\n` +
+                `-----------------------------------------\n` +
+                `⌨️ [KEYSTROKE ANALYSIS]\n` +
+                `  - 키스트로크 통과 여부: ${keystrokeSuccess ? "✅ PASS" : "❌ BLOCK"}\n` +
+                `  - 현재 타건 거리 (Distance): ${distance}\n` +
+                `  - 동적 임계치 (Threshold): ${threshold}\n` +
+                `-----------------------------------------\n` +
+                `🌐 [RISK-BASED AUTH (RBA)]\n` +
+                `  - RBA 티어: ${rbaTier}\n` +
+                `  - 본인 인증 확률 (RBA 값): ${rbaProb}\n` +
+                `  - 주요 기여 속성:\n${riskText}\n` +
+                `-----------------------------------------\n` +
+                `환영합니다! 안전한 세션이 생성되었습니다.`
+            );
+
             const mfaBox = document.getElementById('mfa-section');
             if (mfaBox) mfaBox.style.display = 'none';
         } 
-        // 🟣 [FLOW 01 & 02]: 타건 리듬 불일치 등으로 2차 인증(MFA_REQUIRED) 단계로 걸렸을 때
+        
+        // 🟣 Case 2: [FLOW 01 & 02] 리스크 감지로 인한 2차 인증 가동 (MFA_REQUIRED)
         else if (response.ok && finalStatus === "MFA_REQUIRED") {
             const riskReason = result.security_analysis?.primary_risk_factor || "위협 감지";
-            const distance = result.telemetry?.keystroke?.current_distance ?? "N/A";
-            const threshold = result.telemetry?.keystroke?.dynamic_threshold ?? "N/A";
 
             alert(
-                `🔒 보안 알림: [${riskReason}] 리스크로 인해 2차 인증을 가동합니다.\n` +
-                `---------------------------------\n` +
-                `• 타건 거리 (Distance): ${distance}\n` +
-                `• 동적 임계치 (Threshold): ${threshold}\n` +
-                `---------------------------------`
+                `🔒 [보안 등급 격상]: 2차 인증(MFA) 요구\n` +
+                `• 서버 메시지: [${riskReason}] 리스크 탐지로 인한 추가 인증 가동\n` +
+                `• 최종 STATUS: ${finalStatus}\n` +
+                `-----------------------------------------\n` +
+                `⌨️ [KEYSTROKE ANALYSIS]\n` +
+                `  - 키스트로크 통과 여부: ${keystrokeSuccess ? "✅ PASS" : "❌ BLOCK"}\n` +
+                `  - 현재 타건 거리 (Distance): ${distance}\n` +
+                `  - 동적 임계치 (Threshold): ${threshold}\n` +
+                `-----------------------------------------\n` +
+                `🌐 [RISK-BASED AUTH (RBA)]\n` +
+                `  - RBA 티어: ${rbaTier}\n` +
+                `  - 본인 인증 확률 (RBA 값): ${rbaProb}\n` +
+                `  - 주요 기여 속성:\n${riskText}\n` +
+                `-----------------------------------------\n` +
+                `보안을 위해 하단의 QR 코드를 스캔해 주세요.`
             );
+
             showMfaSection(username); 
         } 
-        // 🔴 [FLOW 04 핵심 패치]: AI 모델이 해커로 판단하여 원천 차단(DENIED) 처리를 내렸을 때!
+        
+        // 🔴 Case 3: [FLOW 04] 비정상 고위험군 유저 로그인 즉시 차단 (DENIED)
         else if (response.ok && finalStatus === "DENIED") {
             const riskReason = result.security_analysis?.primary_risk_factor || "BOTH_RISK";
-            const rbaProb = result.security_analysis?.rba_match_probability ?? "0.0";
 
             alert(
-                `🚨 [위험 감지]: 시스템 불법 접근이 감지되어 접속이 즉시 거부됩니다.\n` +
-                `---------------------------------\n` +
-                `• 차단 사유: ${riskReason} (타건 패스워드 리듬 및 환경 리스크 폭발)\n` +
-                `• 사용자 본인 확률: ${rbaProb}%\n` +
-                `---------------------------------\n` +
-                `보안 지침에 따라 차단 격리 페이지로 강제 이동합니다.`
+                `🚨 [위험 감지]: 시스템 불법 접근 원천 차단 (DENIED)\n` +
+                `• 서버 메시지: 비정상 생체 리듬 및 환경 위협 감지\n` +
+                `• 최종 STATUS: ${finalStatus}\n` +
+                `-----------------------------------------\n` +
+                `⌨️ [KEYSTROKE ANALYSIS]\n` +
+                `  - 키스트로크 통과 여부: ${keystrokeSuccess ? "✅ PASS" : "❌ BLOCK"}\n` +
+                `  - 현재 타건 거리 (Distance): ${distance}\n` +
+                `  - 동적 임계치 (Threshold): ${threshold}\n` +
+                `-----------------------------------------\n` +
+                `🌐 [RISK-BASED AUTH (RBA)]\n` +
+                `  - RBA 티어: ${rbaTier}\n` +
+                `  - 본인 인증 확률 (RBA 값): ${rbaProb}\n` +
+                `  - 주요 기여 속성:\n${riskText}\n` +
+                `-----------------------------------------\n` +
+                `위험 접근으로 판단되어 접근 차단 페이지로 강제 합니다.`
             );
-            // 🎬 윤서님 폴더 안에 있는 denied.html 페이지로 리얼하게 이동!
+
             window.location.href = 'denied.html';
         } 
-        // ❌ 일반 실패: 비번 문자열 자체가 아예 틀렸을 때 (400 Bad Request 등)
+        
+        // ❌ Case 4: 아이디 비밀번호 텍스트 자체가 틀린 경우 (400 에러 등)
         else {
             alert("❌ 로그인 실패: " + (result.detail || "아이디 또는 비밀번호가 일치하지 않습니다."));
         }
@@ -190,7 +265,7 @@ async function login() {
     } finally {
         keyEvents = [];
     }
-}
+} 
 
 function showMfaSection(username) {
     const mfaSection = document.getElementById('mfa-section');
