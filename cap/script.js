@@ -94,25 +94,73 @@ async function login() {
         }
     }
 
+    const ua = navigator.userAgent;
+
+    const osNameVersion =
+        ua.includes("Windows NT 10.0") ? "Windows 10/11" :
+        ua.includes("Windows NT 6.3") ? "Windows 8.1" :
+        ua.includes("Windows NT 6.2") ? "Windows 8" :
+        ua.includes("Windows NT 6.1") ? "Windows 7" :
+        ua.includes("Mac OS X") ? "Mac OS X" :
+        ua.includes("Android") ? "Android" :
+        ua.includes("iPhone") || ua.includes("iPad") ? "iOS" :
+        "Unknown OS";
+
+    let browserNameVersion = "Unknown Browser";
+
+    if (ua.includes("Edg/")) {
+        browserNameVersion = ua.match(/Edg\/([\d.]+)/)?.[0] || "Edge";
+    }
+    else if (ua.includes("Chrome/")) {
+        browserNameVersion = ua.match(/Chrome\/([\d.]+)/)?.[0] || "Chrome";
+    }
+    else if (ua.includes("Firefox/")) {
+        browserNameVersion = ua.match(/Firefox\/([\d.]+)/)?.[0] || "Firefox";
+    }
+    else if (ua.includes("Safari/")) {
+        browserNameVersion = ua.match(/Version\/([\d.]+)/)?.[0] || "Safari";
+    }
+
+    const deviceType =
+        /Mobi|Android|iPhone|iPad/i.test(ua)
+            ? "Mobile"
+            : "Desktop";
+    
+            
+    let geoData = {};
+
+    try {
+        const response = await fetch("https://ipapi.co/json/");
+        geoData = await response.json();
+        console.log("실제 위치 정보:", geoData);
+    } catch (e) {
+        console.error("위치 조회 실패", e);
+    }     
+
     const securityPayload = {
-        "username": username,
-        "password": password,
-        "language": navigator.language || "ko-KR",
-        "resolution": `${window.screen.width}x${window.screen.height}`,
-        "rtt": estimatedRTT || 0,
-        "keystroke": combinedKeystroke,
-        "ip_address": "219.255.207.24",
-        "country": "South Korea",
-        "region": "Seoul",
-        "city": "Seoul",
-        "asn": "AS9318 (SK Broadband)",
-        "user_agent_string": navigator.userAgent,
-        "browser_name_version": "Chrome 120.0.0.0",
-        "os_name_version": "Mac OS X 10.15.7",
-        "device_type": "Desktop"
+        username,
+        password,
+        language: navigator.language || "ko-KR",
+        resolution: `${window.screen.width}x${window.screen.height}`,
+        rtt: estimatedRTT || 0,
+        keystroke: combinedKeystroke,
+
+        ip_address: geoData.ip || "",
+        country: geoData.country_name || "",
+        region: geoData.region || "",
+        city: geoData.city || "",
+        asn: geoData.org || "",
+
+        user_agent_string: navigator.userAgent,
+        browser_name_version: browserNameVersion,
+        os_name_version: osNameVersion,
+        device_type: deviceType
     };
 
-    console.log("🚀 백엔드 전송 규격 데이터 패킷:", securityPayload);
+    console.log("🚀 백엔드 전송 규격 데이터 패킷:", {
+        ...securityPayload,
+        password: "********"
+    });
 
     try {
         const response = await fetch('http://32.197.121.164:8001/auth/login', {
