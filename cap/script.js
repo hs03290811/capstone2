@@ -94,7 +94,6 @@ async function login() {
         }
     }
 
-    // 💡 [문법 수정 완료] 모든 Key-Value 큰따옴표 규칙을 철저하게 맞췄습니다!
     const securityPayload = {
         "username": username,
         "password": password,
@@ -125,7 +124,6 @@ async function login() {
         const result = await response.json();
         console.log("📥 서버 응답 결과:", result);
 
-        // [차트 역연산 알고리즘]: 백엔드가 누락시킨 mean_vector를 수치 기반 동적 복원 가동
         let dist = result.telemetry?.keystroke?.current_distance;
         if (dist === undefined || dist === -1) dist = 0.25;
 
@@ -133,26 +131,19 @@ async function login() {
             return idx % 3 === 0 ? Math.round(val + (dist * 15)) : Math.round(val - (dist * 10));
         });
 
-        // 📉 불필요한 라벨 텍스트 마킹이 제거된 명품 scatter 직선 렌더링
         drawKeystrokeChart(combinedKeystroke, meanVector);
 
-
-        // 📊 [알림창 노출용 AI 핵심 파라미터 정밀 추출 구역]
         const msg = result.message || "보안 연산 완료";
         const keystrokeSuccess = result.telemetry?.keystroke?.success ?? "N/A";
         const distance = result.telemetry?.keystroke?.current_distance ?? "N/A";
         const threshold = result.telemetry?.keystroke?.dynamic_threshold ?? "N/A";
         
-        // 새로 매핑한 주소 구조 싱크 매칭 (rba 객체 내부)
         const rbaTier = result.telemetry?.rba?.risk_tier || "N/A";
         const rbaProb = result.telemetry?.rba?.genuine_probability || "N/A";
         
-        // 💡 [핵심 교정]: 백엔드의 top_features 배열을 안전하게 낚아챕니다.
         const topFeatures = result.telemetry?.rba?.top_features || ["city", "country", "resolution", "browser_name_version"];
         const finalStatus = result.security_analysis?.status || result.status;
-        // =========================================================================
-        // 🎯 [희서님 JSON 100% 리얼 연동]: 백엔드 우선순위 기반 동적 속성 매싱 알고리즘
-        // =========================================================================
+
         const featureLabelMap = {
             "city": "접속 도시 정보 (City)",
             "country": "접속 국가 환경 (Country)",
@@ -163,38 +154,41 @@ async function login() {
             "os_name_version": "운영체제 버전 (OS)"
         };
 
-        // 💡 디바이스 한글 정제 가드 로직
         let rawDevice = result.debug_info?.device || navigator.userAgent;
-        let convertedDevice = "윈도우 PC / 크롬 브라우저";
+        let convertedDevice = "데스크톱 PC"; 
         const upperDevice = rawDevice.toUpperCase();
-        if (upperDevice.includes("WINDOWS")) convertedDevice = "윈도우 데스크톱";
-        else if (upperDevice.includes("MAC") || upperDevice.includes("MACINTOSH")) convertedDevice = "맥북 (Mac OS)";
-        else if (upperDevice.includes("IPHONE")) convertedDevice = "아이폰 (iOS)";
-        else if (upperDevice.includes("ANDROID")) convertedDevice = "안드로이드 모바일";
-
-        if (upperDevice.includes("CHROME")) convertedDevice += " / 크롬 브라우저";
-        else if (upperDevice.includes("SAFARI") && !upperDevice.includes("CHROME")) convertedDevice += " / 사파리 브라우저";
-        else if (upperDevice.includes("EDG")) convertedDevice += " / 엣지 브라우저";
-
         
+        if (upperDevice.includes("WINDOWS")) {
+            convertedDevice = "윈도우 데스크톱";
+        } else if (upperDevice.includes("MACINTOSH") || (upperDevice.includes("MAC") && !upperDevice.includes("LIKE MAC"))) {
+            convertedDevice = "맥북 (Mac OS)";
+        } else if (upperDevice.includes("IPHONE")) {
+            convertedDevice = "아이폰 (iOS)";
+        } else if (upperDevice.includes("ANDROID")) {
+            convertedDevice = "안드로이드 모바일";
+        }
+
+        if (upperDevice.includes("CHROME")) {
+            convertedDevice += " / 크롬 브라우저";
+        } else if (upperDevice.includes("EDG")) {
+            convertedDevice += " / 엣지 브라우저";
+        } else if (upperDevice.includes("SAFARI") && !upperDevice.includes("CHROME")) {
+            convertedDevice += " / 사파리 브라우저";
+        }
         
-        // 💡 백엔드가 준 "순서(우선순위)"에 맞춰 상위 피처일수록 높은 가중치 점수를 부여하는 알고리즘
-        // 희서님이 테스트할 때 값이 바뀌면, 프론트에서도 그 순서에 맞춰 퍼센트 비율이 실시간으로 재배치됩니다!
         const rbaProbValue = parseFloat(result.telemetry?.rba?.genuine_probability) || 100.0;
         
         let riskText = topFeatures
-            .slice(0, 4) // 백엔드가 준 리스트 중 상위 4개 추출
+            .slice(0, 4)
             .map((feature, idx) => {
                 const label = featureLabelMap[feature] || feature;
                 
-                // 💥 백엔드 픽 순위(idx)에 따라 수학적으로 기여도를 차등 분할 (1등이 가장 높게 표현됨)
                 let calculatedWeight = 35.0;
                 if (idx === 0) calculatedWeight = (rbaProbValue * 0.38).toFixed(1);
                 else if (idx === 1) calculatedWeight = (rbaProbValue * 0.28).toFixed(1);
                 else if (idx === 2) calculatedWeight = (rbaProbValue * 0.20).toFixed(1);
                 else if (idx === 3) calculatedWeight = (100.0 - (rbaProbValue * 0.86)).toFixed(1);
                 
-                // 각 피처별 실시간 감지 서브 텍스트 빌드
                 if (feature === "user_agent_string" || feature === "browser_name_version") {
                     return `      ${idx + 1}. ${label}: ${calculatedWeight}%\n         ↳ [감지 정보]: ${convertedDevice}`;
                 }
@@ -214,12 +208,16 @@ async function login() {
             .join('\n');
 
         // =========================================================================
-        // 🛡️ [Defense Matrix 케이스별 맞춤형 정품 알림창 격발]
+        // 🛡️ [Defense Matrix 케이스별 맞춤형 정품 알림창 격발 및 QR 가드 제어]
         // =========================================================================
         
-        // 🟢 Case 1: [FLOW 01 & 03] 로그인 전면 허용 (ALLOWED / KICKED_OUT)
+        // 🟢 Case 1: 로그인 전면 허용 (ALLOWED / KICKED_OUT / ALLOW)
         if (response.ok && (finalStatus === "ALLOWED" || finalStatus === "ALLOW" || finalStatus === "KICKED_OUT")) {
             
+            // 💥 [버그 원천 차단 패치]: 혹시라도 화면에 켜져 있을 수 있는 QR 코드 영역을 완벽하게 숨김 처리합니다.
+            const mfaBox = document.getElementById('mfa-section');
+            if (mfaBox) mfaBox.style.display = 'none';
+
             alert(
                 `🟢 [보안 등급 승인]: 로그인 성공\n` +
                 `• 서버 메시지: ${msg}\n` +
@@ -237,14 +235,14 @@ async function login() {
                 `-----------------------------------------\n` +
                 `환영합니다! 안전한 세션이 생성되었습니다.`
             );
-
-            const mfaBox = document.getElementById('mfa-section');
-            if (mfaBox) mfaBox.style.display = 'none';
         } 
         
-        // 🟣 Case 2: [FLOW 01 & 02] 리스크 감지로 인한 2차 인증 가동 (MFA_REQUIRED)
+        // 🟣 Case 2: 리스크 감지로 인한 2차 인증 가동 (MFA_REQUIRED)
         else if (response.ok && finalStatus === "MFA_REQUIRED") {
             const riskReason = result.security_analysis?.primary_risk_factor || "위협 감지";
+
+            // 💥 [보안 규격 기동]: 오직 'MFA_REQUIRED' 상태일 때만 QR 코드와 타이머 인프라를 활성화합니다.
+            showMfaSection(username); 
 
             alert(
                 `🔒 [보안 등급 격상]: 2차 인증(MFA) 요구\n` +
@@ -263,13 +261,12 @@ async function login() {
                 `-----------------------------------------\n` +
                 `보안을 위해 하단의 QR 코드를 스캔해 주세요.`
             );
-
-            showMfaSection(username); 
         } 
         
-        // 🔴 Case 3: [FLOW 04] 비정상 고위험군 유저 로그인 즉시 차단 (DENIED)
+        // 🔴 Case 3: 비정상 고위험군 유저 로그인 즉시 차단 (DENIED)
         else if (response.ok && finalStatus === "DENIED") {
-            const riskReason = result.security_analysis?.primary_risk_factor || "BOTH_RISK";
+            const mfaBox = document.getElementById('mfa-section');
+            if (mfaBox) mfaBox.style.display = 'none';
 
             alert(
                 `🚨 [위험 감지]: 시스템 불법 접근 원천 차단 (DENIED)\n` +
@@ -291,8 +288,6 @@ async function login() {
 
             window.location.href = 'denied.html';
         } 
-        
-        // ❌ Case 4: 아이디 비밀번호 텍스트 자체가 틀린 경우 (400 에러 등)
         else {
             alert("❌ 로그인 실패: " + (result.detail || "아이디 또는 비밀번호가 일치하지 않습니다."));
         }
@@ -336,7 +331,6 @@ function startTimer() {
     }, 1000);
 }
 
-// 📊 [X축 0.05 완전 고정]: 0.0, 0.05, 0.1, 0.15 눈금 글자 전체 노출 및 45도 회전 방지
 function drawKeystrokeChart(currentData, targetVector) {
     const ctx = document.getElementById('keystrokeChart');
     if (!ctx) return;
@@ -385,7 +379,6 @@ function drawKeystrokeChart(currentData, targetVector) {
         }));
     }
 
-    // 아랫줄 (y = 1) = 현재 입력
     const rawCurrentPoints = parseCmuToAbsoluteTimes(currentData, currentChars, 1); 
 
     let regChars = currentChars;
@@ -396,7 +389,6 @@ function drawKeystrokeChart(currentData, targetVector) {
         }
     }
 
-    // 윗줄 (y = 2) = 등록 평균
     const rawRegPoints = parseCmuToAbsoluteTimes(targetVector, regChars, 2); 
 
     const datasetCurrent = normalizePoints(rawCurrentPoints);
@@ -428,13 +420,11 @@ function drawKeystrokeChart(currentData, targetVector) {
                     max: 1, 
                     title: { display: true, text: 'Time Rate (0.0 ~ 1.0)' },
                     ticks: {
-                        // 🎯 [X축 억까 청소 핵심 패치구역]
-                        stepSize: 0.05, // 0.05 단위로 눈금 생성 강제 고정
-                        maxRotation: 0, // 💥 글자가 대각선으로 돌아가는 버그 원천 차단
-                        minRotation: 0, // 무조건 수평(가로)으로 이쁘게 인쇄
-                        autoSkip: false, // 💥 Chart.js가 임의로 눈금 숫자를 생략하는 억까 방지
+                        stepSize: 0.05,
+                        maxRotation: 0, 
+                        minRotation: 0, 
+                        autoSkip: false, 
                         callback: function(value) {
-                            // 소수점 스케일링 버그 방지용 (0.05, 0.10, 0.15 정밀 인쇄)
                             return parseFloat(value.toFixed(2));
                         }
                     },
