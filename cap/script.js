@@ -133,6 +133,8 @@ async function login() {
 
         drawKeystrokeChart(combinedKeystroke, meanVector);
 
+        const finalStatus = result.security_analysis?.status || result.status;
+
         const msg = result.message || "보안 연산 완료";
         const keystrokeSuccess = result.telemetry?.keystroke?.success ?? "N/A";
         const distance = result.telemetry?.keystroke?.current_distance ?? "N/A";
@@ -141,80 +143,13 @@ async function login() {
         const rbaTier = result.telemetry?.rba?.risk_tier || "N/A";
         const rbaProb = result.telemetry?.rba?.genuine_probability || "N/A";
         
-        const topFeatures = result.telemetry?.rba?.top_features || ["city", "country", "resolution", "browser_name_version"];
-        const finalStatus = result.security_analysis?.status || result.status;
-
-        const featureLabelMap = {
-            "city": "접속 도시 정보 (City)",
-            "country": "접속 국가 환경 (Country)",
-            "resolution": "디스플레이 해상도 (Resolution)",
-            "browser_name_version": "브라우저 식별 정보 (Browser)",
-            "user_agent_string": "브라우저 유저 에이전트 (UA)",
-            "rtt": "네트워크 응답 속도 (RTT)",
-            "os_name_version": "운영체제 버전 (OS)"
-        };
-
-        let rawDevice = result.debug_info?.device || navigator.userAgent;
-        let convertedDevice = "데스크톱 PC"; 
-        const upperDevice = rawDevice.toUpperCase();
-        
-        if (upperDevice.includes("WINDOWS")) {
-            convertedDevice = "윈도우 데스크톱";
-        } else if (upperDevice.includes("MACINTOSH") || (upperDevice.includes("MAC") && !upperDevice.includes("LIKE MAC"))) {
-            convertedDevice = "맥북 (Mac OS)";
-        } else if (upperDevice.includes("IPHONE")) {
-            convertedDevice = "아이폰 (iOS)";
-        } else if (upperDevice.includes("ANDROID")) {
-            convertedDevice = "안드로이드 모바일";
-        }
-
-        if (upperDevice.includes("CHROME")) {
-            convertedDevice += " / 크롬 브라우저";
-        } else if (upperDevice.includes("EDG")) {
-            convertedDevice += " / 엣지 브라우저";
-        } else if (upperDevice.includes("SAFARI") && !upperDevice.includes("CHROME")) {
-            convertedDevice += " / 사파리 브라우저";
-        }
-        
-        const rbaProbValue = parseFloat(result.telemetry?.rba?.genuine_probability) || 100.0;
-        
-        let riskText = topFeatures
-            .slice(0, 4)
-            .map((feature, idx) => {
-                const label = featureLabelMap[feature] || feature;
-                
-                let calculatedWeight = 35.0;
-                if (idx === 0) calculatedWeight = (rbaProbValue * 0.38).toFixed(1);
-                else if (idx === 1) calculatedWeight = (rbaProbValue * 0.28).toFixed(1);
-                else if (idx === 2) calculatedWeight = (rbaProbValue * 0.20).toFixed(1);
-                else if (idx === 3) calculatedWeight = (100.0 - (rbaProbValue * 0.86)).toFixed(1);
-                
-                if (feature === "user_agent_string" || feature === "browser_name_version") {
-                    return `      ${idx + 1}. ${label}: ${calculatedWeight}%\n         ↳ [감지 정보]: ${convertedDevice}`;
-                }
-                if (feature === "country") {
-                    return `      ${idx + 1}. ${label}: ${calculatedWeight}%\n         ↳ [감지 정보]: 대한민국 (South Korea)`;
-                }
-                if (feature === "city" || feature === "region") {
-                    return `      ${idx + 1}. ${label}: ${calculatedWeight}%\n         ↳ [감지 정보]: 서울특별시 (Seoul)`;
-                }
-                if (feature === "resolution") {
-                    const res = result.debug_info?.resolution || `${window.screen.width}x${window.screen.height}`;
-                    return `      ${idx + 1}. ${label}: ${calculatedWeight}%\n         ↳ [감지 정보]: 표준 해상도 (${res})`;
-                }
-                
-                return `      ${idx + 1}. ${label}: ${calculatedWeight}%`;
-            })
-            .join('\n');
-
         // =========================================================================
-        // 🛡️ [Defense Matrix 케이스별 맞춤형 정품 알림창 격발 및 QR 가드 제어]
+        // 🛡️ [Defense Matrix 케이스별 맞춤형 정품 알림창 격발 및 주요 속성 제거 패치]
         // =========================================================================
         
-        // 🟢 Case 1: 로그인 전면 허용 (ALLOWED / KICKED_OUT / ALLOW)
+        // 🟢 Case 1: [FLOW 01 & 03] 로그인 전면 허용 (ALLOWED / KICKED_OUT)
         if (response.ok && (finalStatus === "ALLOWED" || finalStatus === "ALLOW" || finalStatus === "KICKED_OUT")) {
             
-            // 💥 [버그 원천 차단 패치]: 혹시라도 화면에 켜져 있을 수 있는 QR 코드 영역을 완벽하게 숨김 처리합니다.
             const mfaBox = document.getElementById('mfa-section');
             if (mfaBox) mfaBox.style.display = 'none';
 
@@ -231,17 +166,15 @@ async function login() {
                 `🌐 [RISK-BASED AUTH (RBA)]\n` +
                 `  - RBA 티어: ${rbaTier}\n` +
                 `  - 본인 인증 확률 (RBA 값): ${rbaProb}\n` +
-                `  - 주요 기여 속성:\n${riskText}\n` +
                 `-----------------------------------------\n` +
                 `환영합니다! 안전한 세션이 생성되었습니다.`
             );
         } 
         
-        // 🟣 Case 2: 리스크 감지로 인한 2차 인증 가동 (MFA_REQUIRED)
+        // 🟣 Case 2: [FLOW 01 & 02] 리스크 감지로 인한 2차 인증 가동 (MFA_REQUIRED)
         else if (response.ok && finalStatus === "MFA_REQUIRED") {
             const riskReason = result.security_analysis?.primary_risk_factor || "위협 감지";
 
-            // 💥 [보안 규격 기동]: 오직 'MFA_REQUIRED' 상태일 때만 QR 코드와 타이머 인프라를 활성화합니다.
             showMfaSection(username); 
 
             alert(
@@ -257,13 +190,12 @@ async function login() {
                 `🌐 [RISK-BASED AUTH (RBA)]\n` +
                 `  - RBA 티어: ${rbaTier}\n` +
                 `  - 본인 인증 확률 (RBA 값): ${rbaProb}\n` +
-                `  - 주요 기여 속성:\n${riskText}\n` +
                 `-----------------------------------------\n` +
                 `보안을 위해 하단의 QR 코드를 스캔해 주세요.`
             );
         } 
         
-        // 🔴 Case 3: 비정상 고위험군 유저 로그인 즉시 차단 (DENIED)
+        // 🔴 Case 3: [FLOW 04] 비정상 고위험군 유저 로그인 즉시 차단 (DENIED)
         else if (response.ok && finalStatus === "DENIED") {
             const mfaBox = document.getElementById('mfa-section');
             if (mfaBox) mfaBox.style.display = 'none';
@@ -281,7 +213,6 @@ async function login() {
                 `🌐 [RISK-BASED AUTH (RBA)]\n` +
                 `  - RBA 티어: ${rbaTier}\n` +
                 `  - 본인 인증 확률 (RBA 값): ${rbaProb}\n` +
-                `  - 주요 기여 속성:\n${riskText}\n` +
                 `-----------------------------------------\n` +
                 `위험 접근으로 판단되어 접근 차단 페이지로 강제 합니다.`
             );
