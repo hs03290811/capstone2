@@ -2,7 +2,6 @@ let keyEvents = []; // 타이핑 이벤트(keydown, keyup)를 담을 배열
 let timerInterval;
 let keystrokeChart = null; // Chart.js 인스턴스 전역 변수
 
-// [로드맵 Phase 2] RTT 측정을 위한 초기 로드 시간 계산
 let estimatedRTT = 0;
 window.addEventListener('load', () => {
     const navEntries = performance.getEntriesByType("navigation");
